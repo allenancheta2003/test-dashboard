@@ -15,8 +15,8 @@ export default function DashboardPage() {
   const [showUpload, setShowUpload] = useState(false);
   const [csvData, setCsvData] = useState<Record<string, any[]>>({});
 
-  const handleCSVImport = useCallback((p: Platform, rows: any[]) => {
-    setCsvData(prev => ({ ...prev, [p]: rows }));
+const handleCSVImport = useCallback((p: string, subType: string, rows: any[]) => {
+  setCsvData(prev => ({ ...prev, [subType]: rows }));
     setShowUpload(false);
   }, []);
 
@@ -39,7 +39,7 @@ export default function DashboardPage() {
         </header>
 
         <div className="p-8">
-          {platform === "youtube"    && <YouTubeView   dateRange={dateRange} csvData={csvData.youtube} />}
+          {platform === "youtube" && <YouTubeView dateRange={dateRange} shortsCsvData={csvData["youtube-shorts"]} longCsvData={csvData["youtube-longform"]} />}
           {platform === "tiktok"     && <TikTokView    dateRange={dateRange} csvData={csvData.tiktok} />}
           {platform === "instagram"  && <InstagramView dateRange={dateRange} csvData={csvData.instagram} />}
           {platform === "facebook"   && <FacebookView  dateRange={dateRange} csvData={csvData.facebook} />}
@@ -47,8 +47,7 @@ export default function DashboardPage() {
       </main>
 
       {showUpload && (
-        <CSVUploadModal platform={platform} onImport={handleCSVImport} onClose={() => setShowUpload(false)} />
-      )}
+        <CSVUploadModal platform={platform} onImport={handleCSVImport} onClose={() => setShowUpload(false)} />      )}
     </div>
   );
 }
