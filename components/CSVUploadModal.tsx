@@ -1,71 +1,92 @@
 "use client";
 import { useState, useRef } from "react";
-import { Platform } from "@/lib/data";
 
-// ─── CSV field mappings per platform ─────────────────────────────────────────
-// Maps your CSV column headers → our internal field names
-// Adjust these to match the exact column names from each platform's export
-
-const FIELD_MAPS: Record<Platform, Record<string, string>> = {
-  youtube: {
-    // YouTube Studio CSV headers
-    "Video title":             "title",
-    "Video publish time":      "publishedAt",
-    "Views":                   "views",
-    "Watch time (hours)":      "duration",
-    "Average view duration":   "avgViewDuration",
-    "Average percentage viewed": "avgPctViewed",
+const FIELD_MAPS: Record<string, Record<string, string>> = {
+  "youtube-shorts": {
+    "Content":                            "id",
+    "Video title":                        "title",
+    "Video publish time":                 "publishedAt",
+    "Duration":                           "duration",
+    "Views":                              "views",
+    "Watch time (hours)":                 "watchTimeHours",
+    "Subscribers":                        "subscribers",
+    "Impressions":                        "impressions",
     "Impressions click-through rate (%)": "ctr",
-    "Likes":                   "likes",
-    "Comments added":          "comments",
-    "Subscribers":             "subscribers",
+    "Likes":                              "likes",
+    "Comments added":                     "comments",
   },
-  tiktok: {
-    // TikTok Analytics CSV headers
-    "Video Title":             "title",
-    "Date":                    "publishedAt",
-    "Views":                   "views",
-    "Likes":                   "likes",
-    "Comments":                "comments",
-    "Shares":                  "shares",
-    "Saves":                   "saves",
-    "Average watch time (sec)":"avgWatchTime",
-    "Total play time (sec)":   "duration",
-    "Retention Rate (%)":      "retention",
-    "Total Engagements":       "totalEngagement",
+  "youtube-longform": {
+    "Content":                            "id",
+    "Video title":                        "title",
+    "Video publish time":                 "publishedAt",
+    "Duration":                           "duration",
+    "Views":                              "views",
+    "Watch time (hours)":                 "watchTimeHours",
+    "Average view duration":              "avgViewDuration",
+    "Average percentage viewed":          "avgPctViewed",
+    "Subscribers":                        "subscribers",
+    "Impressions":                        "impressions",
+    "Impressions click-through rate (%)": "ctr",
+    "Likes":                              "likes",
+    "Comments added":                     "comments",
   },
-  instagram: {
-    // Instagram Insights CSV headers
-    "Reel title":              "title",
-    "Date":                    "publishedAt",
-    "Plays":                   "views",
-    "Likes":                   "likes",
-    "Comments":                "comments",
-    "Shares":                  "shares",
-    "Saves":                   "saves",
-    "Reposts":                 "reposts",
-    "Average watch time (sec)":"avgWatchTime",
-    "Duration (sec)":          "duration",
-    "3s view rate (%)":        "viewRatePast3s",
-    "Retention (%)":           "retention",
-    "Total Interactions":      "totalEngagement",
+  "tiktok": {
+    "Video Title":                        "title",
+    "Date":                               "publishedAt",
+    "Views":                              "views",
+    "Likes":                              "likes",
+    "Comments":                           "comments",
+    "Shares":                             "shares",
+    "Saves":                              "saves",
+    "Average watch time (sec)":           "avgWatchTime",
+    "Total play time (sec)":              "duration",
+    "Retention Rate (%)":                 "retention",
+    "Total Engagements":                  "totalEngagement",
   },
-  facebook: {
-    // Facebook Page Insights CSV headers
-    "Post Title":              "title",
-    "Date Published":          "publishedAt",
-    "Reach":                   "reach",
-    "Impressions":             "impressions",
-    "Likes":                   "likes",
-    "Comments":                "comments",
-    "Shares":                  "shares",
-    "Link Clicks":             "clicks",
+  "instagram": {
+    "Reel title":                         "title",
+    "Date":                               "publishedAt",
+    "Plays":                              "views",
+    "Likes":                              "likes",
+    "Comments":                           "comments",
+    "Shares":                             "shares",
+    "Saves":                              "saves",
+    "Reposts":                            "reposts",
+    "Average watch time (sec)":           "avgWatchTime",
+    "Duration (sec)":                     "duration",
+    "3s view rate (%)":                   "viewRatePast3s",
+    "Retention (%)":                      "retention",
+    "Total Interactions":                 "totalEngagement",
+  },
+  "facebook": {
+    "Post Title":                         "title",
+    "Date Published":                     "publishedAt",
+    "Reach":                              "reach",
+    "Impressions":                        "impressions",
+    "Likes":                              "likes",
+    "Comments":                           "comments",
+    "Shares":                             "shares",
+    "Link Clicks":                        "clicks",
   },
 };
 
-const PLATFORM_LABELS: Record<Platform, string> = {
-  youtube: "YouTube", tiktok: "TikTok", instagram: "Instagram", facebook: "Facebook",
+const TYPE_LABELS: Record<string, string> = {
+  "youtube-shorts":  "YouTube Shorts",
+  "youtube-longform":"YouTube Long-form",
+  "tiktok":          "TikTok",
+  "instagram":       "Instagram",
+  "facebook":        "Facebook",
 };
+
+function detectType(filename: string): string | null {
+  const f = filename.toLowerCase().replace(/\s+/g, "-");
+  if (f.includes("youtube-shorts") || f.includes("yt-shorts"))   return "youtube-shorts";
+  if (f.includes("youtube-longform") || f.includes("yt-longform") || f.includes("youtube-long")) return "youtube-longform";
+  if (f.includes("tiktok"))     return "tiktok";
+  if (f.includes("instagram"))  return "instagram";
+  if (f.includes("facebook"))   return "facebook";
+  return null;
+}
 
 function parseCSV(text: string): Record<string, string>[] {
   const lines = text.trim().split("\n");
@@ -93,27 +114,42 @@ function mapRow(row: Record<string, string>, fieldMap: Record<string, string>, i
 }
 
 export default function CSVUploadModal({ platform, onImport, onClose }: {
-  platform: Platform;
-  onImport: (p: Platform, rows: any[]) => void;
+  platform: string;
+  onImport: (p: string, subType: string, rows: any[]) => void;
   onClose: () => void;
 }) {
-  const [dragging, setDragging] = useState(false);
-  const [preview, setPreview] = useState<any[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [dragging, setDragging]   = useState(false);
+  const [preview, setPreview]     = useState<any[] | null>(null);
+  const [detectedType, setDetectedType] = useState<string | null>(null);
+  const [error, setError]         = useState<string | null>(null);
+  const [fileName, setFileName]   = useState<string>("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const processFile = (file: File) => {
     setError(null);
+    setFileName(file.name);
     if (!file.name.endsWith(".csv")) { setError("Please upload a .csv file"); return; }
+
+    const type = detectType(file.name);
+    if (!type) {
+      setError(
+        `Could not detect type from filename "${file.name}". ` +
+        `Please rename your file to include: youtube-shorts, youtube-longform, tiktok, instagram, or facebook.`
+      );
+      return;
+    }
+
+    setDetectedType(type);
     const reader = new FileReader();
     reader.onload = e => {
       const text = e.target?.result as string;
       const rows = parseCSV(text);
       if (!rows.length) { setError("CSV appears to be empty"); return; }
-      const fieldMap = FIELD_MAPS[platform];
-      const mapped = rows.map((r, i) => mapRow(r, fieldMap, i));
-      setPreview(mapped.slice(0, 3)); // show first 3 as preview
-      // store full mapped data on confirm
+      const fieldMap = FIELD_MAPS[type];
+      const mapped = rows
+        .filter((r: any) => r["Video title"] || r["Video Title"] || r["Reel title"] || r["Post Title"])
+        .map((r, i) => mapRow(r, fieldMap, i));
+      setPreview(mapped.slice(0, 3));
       (window as any).__csvFull = mapped;
     };
     reader.readAsText(file);
@@ -127,69 +163,98 @@ export default function CSVUploadModal({ platform, onImport, onClose }: {
 
   const handleConfirm = () => {
     const full = (window as any).__csvFull;
-    if (full) onImport(platform, full);
+    if (full && detectedType) onImport(platform, detectedType, full);
   };
 
-  const fieldMap = FIELD_MAPS[platform];
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div className="w-full max-w-2xl mx-4 bg-[#0f0f1a] border border-white/10 rounded-2xl overflow-hidden">
+    <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.7)" }}>
+      <div style={{ width: "100%", maxWidth: 560, margin: "0 16px", background: "#0f0f1a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 20, overflow: "hidden" }}>
+
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.07]">
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
           <div>
-            <h2 className="text-white font-semibold">Import {PLATFORM_LABELS[platform]} CSV</h2>
-            <p className="text-white/35 text-xs mt-0.5">Export from {PLATFORM_LABELS[platform]} Studio/Analytics, then upload here</p>
+            <h2 style={{ margin: 0, color: "white", fontSize: 16, fontWeight: 600 }}>Import CSV</h2>
+            <p style={{ margin: "4px 0 0", color: "rgba(255,255,255,0.35)", fontSize: 12 }}>
+              Rename your file before importing so we know what it contains
+            </p>
           </div>
-          <button onClick={onClose} className="text-white/30 hover:text-white/70 transition-colors">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", fontSize: 20 }}>✕</button>
         </div>
 
-        <div className="p-6">
-          {/* Drop Zone */}
+        <div style={{ padding: 24 }}>
+
+          {/* Naming guide */}
+          {!preview && (
+            <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 12, padding: 16, marginBottom: 20 }}>
+              <p style={{ margin: "0 0 10px", fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                Rename your file to one of these before uploading
+              </p>
+              {Object.entries(TYPE_LABELS).map(([key, label]) => (
+                <div key={key} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6 }}>
+                  <code style={{ background: "rgba(255,255,255,0.08)", padding: "2px 8px", borderRadius: 6, fontSize: 12, color: "rgba(255,255,255,0.7)" }}>
+                    {key}.csv
+                  </code>
+                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>→ {label}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Detected type badge */}
+          {detectedType && (
+            <div style={{ marginBottom: 16, padding: "8px 14px", background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.3)", borderRadius: 8, fontSize: 13, color: "#22c55e" }}>
+              ✓ Detected as: <strong>{TYPE_LABELS[detectedType]}</strong>
+            </div>
+          )}
+
+          {/* Drop zone */}
           {!preview && (
             <>
               <div
-                className="border-2 border-dashed rounded-xl p-10 text-center transition-all cursor-pointer"
-                style={{ borderColor: dragging ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.1)", background: dragging ? "rgba(255,255,255,0.04)" : "transparent" }}
+                style={{ border: `2px dashed ${dragging ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.1)"}`, borderRadius: 12, padding: 40, textAlign: "center", cursor: "pointer", background: dragging ? "rgba(255,255,255,0.04)" : "transparent" }}
                 onDragOver={e => { e.preventDefault(); setDragging(true); }}
                 onDragLeave={() => setDragging(false)}
                 onDrop={handleDrop}
                 onClick={() => fileRef.current?.click()}
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-10 h-10 mx-auto mb-3 text-white/25">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-                </svg>
-                <p className="text-white/50 text-sm font-medium">Drop your CSV here or click to browse</p>
-                <p className="text-white/25 text-xs mt-1">.csv files only</p>
-                <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={e => { if (e.target.files?.[0]) processFile(e.target.files[0]); }} />
+                <div style={{ fontSize: 32, marginBottom: 12 }}>📂</div>
+                <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 14, margin: "0 0 4px", fontWeight: 500 }}>
+                  Drop your CSV here or click to browse
+                </p>
+                <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 12, margin: 0 }}>
+                  Make sure filename includes: youtube-shorts, youtube-longform, tiktok, instagram, or facebook
+                </p>
+                <input ref={fileRef} type="file" accept=".csv" style={{ display: "none" }} onChange={e => { if (e.target.files?.[0]) processFile(e.target.files[0]); }} />
               </div>
-              {error && <p className="text-rose-400 text-sm mt-3">{error}</p>}
+              {error && (
+                <div style={{ marginTop: 12, padding: "10px 14px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, fontSize: 13, color: "#ef4444" }}>
+                  {error}
+                </div>
+              )}
             </>
           )}
 
           {/* Preview */}
-          {preview && (
+          {preview && detectedType && (
             <div>
-              <p className="text-white/50 text-sm mb-3">Preview — first 3 rows mapped:</p>
-              <div className="bg-white/[0.04] rounded-xl p-4 overflow-x-auto mb-4">
-                <table className="text-xs w-full">
+              <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 13, marginBottom: 12 }}>
+                Preview — first 3 rows of <strong style={{ color: "white" }}>{fileName}</strong>
+              </p>
+              <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 12, padding: 16, overflowX: "auto", marginBottom: 16 }}>
+                <table style={{ fontSize: 12, width: "100%", borderCollapse: "collapse" }}>
                   <thead>
                     <tr>
-                      {Object.values(fieldMap).slice(0, 6).map(k => (
-                        <th key={k} className="text-white/30 font-medium text-left pb-2 pr-4">{k}</th>
+                      {Object.values(FIELD_MAPS[detectedType]).slice(0, 5).map(k => (
+                        <th key={k} style={{ color: "rgba(255,255,255,0.3)", fontWeight: 500, textAlign: "left", paddingBottom: 8, paddingRight: 16 }}>{k}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {preview.map((row, i) => (
-                      <tr key={i} className="border-t border-white/[0.06]">
-                        {Object.values(fieldMap).slice(0, 6).map(k => (
-                          <td key={k} className="text-white/60 py-1.5 pr-4 tabular-nums">
-                            {row[k] !== undefined ? String(row[k]).slice(0, 20) : "—"}
+                      <tr key={i} style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                        {Object.values(FIELD_MAPS[detectedType]).slice(0, 5).map(k => (
+                          <td key={k} style={{ color: "rgba(255,255,255,0.6)", padding: "6px 16px 6px 0" }}>
+                            {row[k] !== undefined ? String(row[k]).slice(0, 18) : "—"}
                           </td>
                         ))}
                       </tr>
@@ -197,33 +262,22 @@ export default function CSVUploadModal({ platform, onImport, onClose }: {
                   </tbody>
                 </table>
               </div>
-              <div className="flex gap-3">
+              <div style={{ display: "flex", gap: 10 }}>
                 <button
                   onClick={handleConfirm}
-                  className="flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all"
-                  style={{ background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.9)" }}
+                  style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: "none", cursor: "pointer", background: "rgba(255,255,255,0.1)", color: "white", fontSize: 14, fontWeight: 600 }}
                 >
-                  Import {(window as any).__csvFull?.length} rows
+                  Import {(window as any).__csvFull?.length} rows into {TYPE_LABELS[detectedType]}
                 </button>
                 <button
-                  onClick={() => { setPreview(null); (window as any).__csvFull = null; }}
-                  className="px-4 py-2.5 rounded-lg text-sm text-white/40 hover:text-white/70 border border-white/10 transition-all"
+                  onClick={() => { setPreview(null); setDetectedType(null); setError(null); }}
+                  style={{ padding: "10px 16px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)", cursor: "pointer", background: "transparent", color: "rgba(255,255,255,0.4)", fontSize: 14 }}
                 >
-                  Try another file
+                  Try another
                 </button>
               </div>
             </div>
           )}
-
-          {/* Expected columns */}
-          <div className="mt-5 border-t border-white/[0.07] pt-4">
-            <p className="text-white/25 text-[10px] uppercase tracking-widest font-semibold mb-2">Expected column names in your CSV</p>
-            <div className="flex flex-wrap gap-1.5">
-              {Object.keys(fieldMap).map(col => (
-                <span key={col} className="text-[11px] text-white/40 bg-white/[0.05] px-2 py-1 rounded-md">{col}</span>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
     </div>
