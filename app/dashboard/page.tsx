@@ -10,7 +10,7 @@ import CSVUploadModal from "@/components/CSVUploadModal";
 
 export default function DashboardPage() {
   const [platform, setPlatform] = useState("youtube");
-  const [dateRange, setDateRange] = useState("28d");
+  const [dateRange, setDateRange] = useState<string>("all");
   const [showUpload, setShowUpload] = useState(false);
   const [csvData, setCsvData] = useState<Record<string, any[]>>({});
 
