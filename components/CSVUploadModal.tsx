@@ -34,24 +34,24 @@ const FIELD_MAPS: Record<string, Record<string, string>> = {
     "Subscribers":                        "subscribers",
   },
   "tiktok": {
-    "Video Title":                        "title",
-    "Date":                               "publishedAt",
-    "Views":                              "views",
-    "Likes":                              "likes",
-    "Comments":                           "comments",
-    "Shares":                             "shares",
-    "Saves":                              "saves",
-    "Average watch time (sec)":           "avgWatchTime",
-    "Total play time (sec)":              "duration",
-    "Retention Rate (%)":                 "retention",
-    "Total Engagements":                  "totalEngagement",
+    "Video Title":              "title",
+    "Date":                     "publishedAt",
+    "Views":                    "views",
+    "Likes":                    "likes",
+    "Comments":                 "comments",
+    "Shares":                   "shares",
+    "Saves":                    "saves",
+    "Average watch time (sec)": "avgWatchTime",
+    "Total play time (sec)":    "duration",
+    "Retention Rate (%)":       "retention",
+    "Total Engagements":        "totalEngagement",
   },
   // ─── Instagram — exact columns from Meta Content export ───────────────────
   "instagram": {
     "Post ID":        "postId",
     "Description":    "title",
     "Duration (sec)": "duration",
-    "Publish time":   "publishedAt",   // format: "04/04/2025 16:09"
+    "Publish time":   "publishedAt",
     "Permalink":      "permalink",
     "Post type":      "format",
     "Views":          "views",
@@ -68,7 +68,7 @@ const FIELD_MAPS: Record<string, Record<string, string>> = {
     "Title":                          "title",
     "Description":                    "description",
     "Duration (sec)":                 "duration",
-    "Publish time":                   "publishedAt",  // format: "03/28/2026 18:16"
+    "Publish time":                   "publishedAt",
     "Permalink":                      "permalink",
     "Post type":                      "format",
     "Views":                          "views",
@@ -102,22 +102,26 @@ function detectType(filename: string): string | null {
   return null;
 }
 
-// Robust CSV parser — handles quoted fields containing commas and newlines
-// (Meta exports have descriptions with newlines inside quoted fields)
+// Robust CSV parser that handles:
+// - Quoted fields containing commas
+// - Quoted fields containing newlines (Meta export descriptions)
+// - Escaped quotes inside quoted fields ("")
+// - BOM character at start of file
 function parseCSV(text: string): Record<string, string>[] {
+  // Strip BOM
+  const t = text.startsWith("\uFEFF") ? text.slice(1) : text;
   const rows: string[][] = [];
   let cur = "", inQ = false, row: string[] = [];
-  // Strip BOM if present
-  const t = text.startsWith("\uFEFF") ? text.slice(1) : text;
+
   for (let i = 0; i < t.length; i++) {
     const ch = t[i], nx = t[i + 1];
     if (ch === '"') {
-      if (inQ && nx === '"') { cur += '"'; i++; } // escaped quote
+      if (inQ && nx === '"') { cur += '"'; i++; } // escaped ""
       else inQ = !inQ;
     } else if (ch === ',' && !inQ) {
       row.push(cur.trim()); cur = "";
     } else if ((ch === '\n' || ch === '\r') && !inQ) {
-      if (ch === '\r' && nx === '\n') i++;
+      if (ch === '\r' && nx === '\n') i++; // handle \r\n
       row.push(cur.trim()); cur = "";
       if (row.some(c => c !== "")) rows.push(row);
       row = [];
@@ -125,9 +129,14 @@ function parseCSV(text: string): Record<string, string>[] {
       cur += ch;
     }
   }
-  if (cur || row.length) { row.push(cur.trim()); if (row.some(c => c !== "")) rows.push(row); }
+  // Push last row
+  if (cur || row.length) {
+    row.push(cur.trim());
+    if (row.some(c => c !== "")) rows.push(row);
+  }
+
   if (rows.length < 2) return [];
-  const headers = rows[0].map(h => h.replace(/^\uFEFF/, "").trim());
+  const headers = rows[0].map(h => h.trim());
   return rows.slice(1).map(vals => {
     const obj: Record<string, string> = {};
     headers.forEach((h, i) => { obj[h] = vals[i] ?? ""; });
@@ -135,7 +144,7 @@ function parseCSV(text: string): Record<string, string>[] {
   });
 }
 
-// Converts "0:01:23" or "0:00:50" → seconds
+// Converts "0:01:23" → seconds
 function parseDuration(val: string): number {
   if (!val) return 0;
   const parts = val.split(":").map(Number);
@@ -144,17 +153,16 @@ function parseDuration(val: string): number {
   return Number(val) || 0;
 }
 
-// Normalizes date strings to YYYY-MM for month filtering
-// Handles: "04/04/2025 16:09", "Apr 25, 2024", "2024-04-25"
+// Normalizes any date format to YYYY-MM for month filtering
 function normalizeDate(raw: string): string {
   if (!raw || raw.trim() === "") return "";
   const s = raw.trim();
-  // MM/DD/YYYY HH:MM (Meta export format)
+  // MM/DD/YYYY HH:MM — Meta export format
   const mmddyyyy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if (mmddyyyy) return `${mmddyyyy[3]}-${mmddyyyy[1].padStart(2, "0")}`;
   // YYYY-MM-DD
   if (/^\d{4}-\d{2}/.test(s)) return s.slice(0, 7);
-  // Mon DD, YYYY (YouTube format)
+  // Mon DD, YYYY — YouTube format
   const months: Record<string, string> = {
     jan:"01",feb:"02",mar:"03",apr:"04",may:"05",jun:"06",
     jul:"07",aug:"08",sep:"09",oct:"10",nov:"11",dec:"12"
@@ -172,12 +180,12 @@ function mapRow(row: Record<string, string>, fieldMap: Record<string, string>, i
     const raw = (row[csvCol] ?? "").trim();
     if (raw === "") continue;
     if (key === "publishedAt") {
-      out[key] = raw;                        // keep original string for display
-      out["publishedYM"] = normalizeDate(raw); // YYYY-MM for month filtering
+      out[key] = raw;
+      out["publishedYM"] = normalizeDate(raw); // YYYY-MM for filtering
     } else if (key === "avgViewDuration" && raw.includes(":")) {
       out[key] = parseDuration(raw);
     } else if (key === "title") {
-      // Use first non-empty line (Meta descriptions can be multi-line)
+      // Take only first line — Meta descriptions are multi-line
       out[key] = raw.split(/\r?\n/)[0].trim().slice(0, 120) || `Post ${idx + 1}`;
     } else {
       const num = parseFloat(raw.replace(/,/g, ""));
@@ -186,6 +194,18 @@ function mapRow(row: Record<string, string>, fieldMap: Record<string, string>, i
   }
   if (!out.title) out.title = `Row ${idx + 1}`;
   return out;
+}
+
+function shouldSkipRow(row: Record<string, string>, type: string): boolean {
+  // YouTube: skip the "Total" summary row
+  if (type.startsWith("youtube")) {
+    const content = (row["Content"] || "").trim();
+    const title   = (row["Video title"] || "").trim();
+    if (content === "Total" && title === "") return true;
+  }
+  // Never skip based on Date field — Meta sets Date="Lifetime" on ALL rows
+  // which is normal and should NOT be filtered out
+  return false;
 }
 
 export default function CSVUploadModal({ platform, importedTypes, onImport, onClose }: {
@@ -216,20 +236,15 @@ export default function CSVUploadModal({ platform, importedTypes, onImport, onCl
     reader.onload = e => {
       const text = e.target?.result as string;
       const rows = parseCSV(text);
-      if (!rows.length) { setError("CSV appears to be empty"); return; }
+      if (!rows.length) { setError("CSV appears to be empty or could not be parsed"); return; }
       const fieldMap = FIELD_MAPS[type];
       const mapped = rows
-        .filter(r => {
-          // Skip summary/total rows that Meta adds
-          const date = r["Date"] || r["Publish time"] || "";
-          if (date === "Lifetime" || date === "Total") return false;
-          // Must have some identifiable content
-          const title = r["Video title"] || r["Video Title"] || r["Reel title"] ||
-                        r["Post Title"] || r["Description"] || r["Title"] || "";
-          const id    = r["Post ID"] || r["Content"] || "";
-          return title.trim() !== "" || id.trim() !== "";
-        })
+        .filter(r => !shouldSkipRow(r, type))
         .map((r, i) => mapRow(r, fieldMap, i));
+      if (!mapped.length) {
+        setError("No valid rows found. Make sure you renamed the file correctly and it has data.");
+        return;
+      }
       setPreview(mapped.slice(0, 3));
       setFullData(mapped);
     };
