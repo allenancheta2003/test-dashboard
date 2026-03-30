@@ -66,7 +66,6 @@ function ShortsSection({ videos }: { videos: any[] }) {
   const totLikes    = videos.reduce((a,v) => a+(Number(v.likes)||0), 0);
   const totComments = videos.reduce((a,v) => a+(Number(v.comments)||0), 0);
   const totSubs     = videos.reduce((a,v) => a+(Number(v.subscribers)||0), 0);
-  const totImpr     = videos.reduce((a,v) => a+(Number(v.impressions)||0), 0);
   const avgStayed   = videos.length ? (videos.reduce((a,v)=>a+(Number(v.stayedToWatch)||0),0)/videos.length).toFixed(1) : "0";
   const avgCTR      = videos.length ? (videos.reduce((a,v)=>a+(Number(v.ctr)||0),0)/videos.length).toFixed(2) : "0";
   if (!videos.length) return (
@@ -82,7 +81,6 @@ function ShortsSection({ videos }: { videos: any[] }) {
         <MetricCard label="Total likes"          value={fmt(totLikes)}      accent={COLOR} />
         <MetricCard label="Total comments"       value={fmt(totComments)}   accent={COLOR} />
         <MetricCard label="Subscribers gained"   value={`+${fmt(totSubs)}`} accent={COLOR} />
-        <MetricCard label="Total impressions"    value={fmt(totImpr)}       accent={COLOR} />
         <MetricCard label="Avg. stayed to watch" value={`${avgStayed}%`}    accent={COLOR} bar={parseFloat(avgStayed)} />
         <MetricCard label="Avg. CTR"             value={`${avgCTR}%`}       accent={COLOR} bar={parseFloat(avgCTR)*10} />
       </OverviewGrid>
@@ -127,7 +125,6 @@ function ShortsSection({ videos }: { videos: any[] }) {
                   {label:"Comments",           value:fmt(Number(v.comments)||0)},
                   {label:"Likes",              value:fmt(likes)},
                   {label:"Subscribers gained", value:`+${fmt(Number(v.subscribers)||0)}`},
-                  {label:"Impressions",        value:fmt(Number(v.impressions)||0)},
                   {label:"CTR",                value:v.ctr?`${Number(v.ctr).toFixed(2)}%`:"—"},
                   {label:"Watch time",         value:v.watchTimeHours?`${Number(v.watchTimeHours).toFixed(1)}h`:"—"},
                 ]} />
@@ -157,10 +154,13 @@ function ShortsSection({ videos }: { videos: any[] }) {
 }
 
 function LongformSection({ videos }: { videos: any[] }) {
-  const totViews = videos.reduce((a,v)=>a+(Number(v.views)||0),0);
-  const totLikes = videos.reduce((a,v)=>a+(Number(v.likes)||0),0);
-  const avgCTR   = videos.length?(videos.reduce((a,v)=>a+(Number(v.ctr)||0),0)/videos.length).toFixed(2):"0";
-  const avgPct   = videos.length?(videos.reduce((a,v)=>a+(Number(v.avgPctViewed)||0),0)/videos.length).toFixed(1):"0";
+  const totViews    = videos.reduce((a,v)=>a+(Number(v.views)||0),0);
+  const totLikes    = videos.reduce((a,v)=>a+(Number(v.likes)||0),0);
+  const totSubs     = videos.reduce((a,v)=>a+(Number(v.subscribers)||0),0);
+  const totComments = videos.reduce((a,v)=>a+(Number(v.comments)||0),0);
+  const avgCTR      = videos.length?(videos.reduce((a,v)=>a+(Number(v.ctr)||0),0)/videos.length).toFixed(2):"0";
+  const avgPct      = videos.length?(videos.reduce((a,v)=>a+(Number(v.avgPctViewed)||0),0)/videos.length).toFixed(1):"0";
+
   if (!videos.length) return (
     <div style={{textAlign:"center",padding:60,color:"rgba(255,255,255,0.3)",fontSize:14}}>
       No Long-form data. Import a <code>youtube-longform.csv</code> file.
@@ -170,21 +170,23 @@ function LongformSection({ videos }: { videos: any[] }) {
     <>
       <SectionLabel>Long-form overview · {videos.length} videos</SectionLabel>
       <OverviewGrid>
-        <MetricCard label="Total views"   value={fmt(totViews)} accent={COLOR} />
-        <MetricCard label="Total likes"   value={fmt(totLikes)} accent={COLOR} />
-        <MetricCard label="Avg. CTR"      value={`${avgCTR}%`}  accent={COLOR} bar={parseFloat(avgCTR)*10} />
-        <MetricCard label="Avg. % viewed" value={`${avgPct}%`}  accent={COLOR} bar={parseFloat(avgPct)} />
+        <MetricCard label="Total views"      value={fmt(totViews)}      accent={COLOR} />
+        <MetricCard label="Total likes"      value={fmt(totLikes)}      accent={COLOR} />
+        <MetricCard label="Total comments"   value={fmt(totComments)}   accent={COLOR} />
+        <MetricCard label="Subscribers gained" value={`+${fmt(totSubs)}`} accent={COLOR} />
+        <MetricCard label="Avg. CTR"         value={`${avgCTR}%`}       accent={COLOR} bar={parseFloat(avgCTR)*10} />
+        <MetricCard label="Avg. % viewed"    value={`${avgPct}%`}       accent={COLOR} bar={parseFloat(avgPct)} />
       </OverviewGrid>
       <SectionLabel>Videos — click to expand</SectionLabel>
       <div style={{display:"flex",flexDirection:"column",gap:8}}>
         {videos.map((v: any,i: number)=>{
-          const likes=Number(v.likes)||0;
-          const likesPct=Number(v.likesPct)||0;
-          const dislikes=likesPct>0?Math.round(likes/(likesPct/100)-likes):0;
-          const dur=Number(v.duration)||0;
-          const avgDurSec=parseAvgDur(v.avgViewDuration);
-          const videoId=v.videoId||"";
-          const ytUrl=videoId?`https://youtube.com/watch?v=${videoId}`:null;
+          const likes     = Number(v.likes)||0;
+          const likesPct  = Number(v.likesPct)||0;
+          const dislikes  = likesPct>0?Math.round(likes/(likesPct/100)-likes):0;
+          const dur       = Number(v.duration)||0;
+          const avgDurSec = parseAvgDur(v.avgViewDuration);
+          const videoId   = v.videoId||"";
+          const ytUrl     = videoId?`https://youtube.com/watch?v=${videoId}`:null;
           return (
             <VideoCard
               key={v.id||i} id={String(v.id||i)}
@@ -206,6 +208,7 @@ function LongformSection({ videos }: { videos: any[] }) {
                     ▶ Open on YouTube
                   </a>
                 )}
+                <p style={{color:"rgba(255,255,255,0.25)",fontSize:10,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>All metrics</p>
                 <InlineMetrics items={[
                   {label:"Views",              value:fmt(Number(v.views)||0)},
                   {label:"Duration",           value:dur>0?fmtSec(dur):"—"},
@@ -216,10 +219,24 @@ function LongformSection({ videos }: { videos: any[] }) {
                   {label:"Likes",              value:fmt(likes)},
                   {label:"Subscribers gained", value:`+${fmt(Number(v.subscribers)||0)}`},
                   {label:"Watch time",         value:v.watchTimeHours?`${Number(v.watchTimeHours).toFixed(1)}h`:"—"},
+                  {label:"Impressions",        value:fmt(Number(v.impressions)||0)},
                 ]} />
                 <div style={{marginTop:16}}>
+                  <p style={{color:"rgba(255,255,255,0.25)",fontSize:10,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Likes vs. dislikes</p>
                   <LikeDislikeBar likes={likes} dislikes={dislikes} />
+                  <p style={{color:"rgba(255,255,255,0.25)",fontSize:11,marginTop:4}}>
+                    {fmt(likes)} likes · {likesPct>0?`${likesPct}% positive`:"no dislike data"}
+                  </p>
                 </div>
+                {Number(v.avgPctViewed)>0&&(
+                  <div style={{marginTop:16}}>
+                    <p style={{color:"rgba(255,255,255,0.25)",fontSize:10,marginBottom:6}}>Avg. % viewed</p>
+                    <div style={{height:8,borderRadius:99,background:"rgba(255,255,255,0.1)",overflow:"hidden"}}>
+                      <div style={{width:`${Math.min(Number(v.avgPctViewed),100)}%`,height:"100%",background:COLOR,borderRadius:99}} />
+                    </div>
+                    <p style={{color:"rgba(255,255,255,0.3)",fontSize:11,marginTop:4}}>{Number(v.avgPctViewed).toFixed(1)}% of the video watched on average</p>
+                  </div>
+                )}
               </div>
             </VideoCard>
           );
