@@ -9,7 +9,7 @@ import {
 
 const COLOR = "#FF4444";
 
-export default function YouTubeView({ dateRange, csvData }: { dateRange: string; csvData?: any[] }) {
+export default function YouTubeView({ dateRange, shortsCsvData, longCsvData }: { dateRange: string; shortsCsvData?: any[]; longCsvData?: any[] }) {
   const [format, setFormat] = useState<"shorts" | "longform">("shorts");
 
   return (
@@ -25,8 +25,7 @@ export default function YouTubeView({ dateRange, csvData }: { dateRange: string;
   );
 }
 
-function ShortsSection() {
-  const videos = ytShorts;
+function ShortsSection({ videos }: { videos: any[] }) {
   const totViews   = videos.reduce((a, v) => a + v.views, 0);
   const totLikes   = videos.reduce((a, v) => a + v.likes, 0);
   const totComments= videos.reduce((a, v) => a + v.comments, 0);
@@ -106,8 +105,7 @@ function ShortsSection() {
   );
 }
 
-function LongformSection() {
-  const videos = ytLongform;
+function LongformSection({ videos }: { videos: any[] }) {
   const totViews   = videos.reduce((a, v) => a + v.views, 0);
   const totLikes   = videos.reduce((a, v) => a + v.likes, 0);
   const avgCTR     = (videos.reduce((a, v) => a + v.ctr, 0) / videos.length).toFixed(1);
