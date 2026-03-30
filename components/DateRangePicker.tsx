@@ -36,7 +36,7 @@ export default function DateRangePicker({ value, onChange }: {
           outline: "none",
         }}
       >
-        <option value="all" style={{ background: "#0f0f1a" }}>All time</option>
+        <option value="unpublished" style={{ background: "#0f0f1a" }}>Unpublished</option>
         {options.map(o => (
           <option key={o.val} value={o.val} style={{ background: "#0f0f1a" }}>
             {o.label}
