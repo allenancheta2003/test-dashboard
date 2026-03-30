@@ -16,42 +16,27 @@ export default function DashboardPage() {
   const [showUpload, setShowUpload] = useState(false);
   const [csvData, setCsvData]       = useState<Record<string, any[]>>({});
 
-  // Load saved CSV data from localStorage on first load
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        setCsvData(parsed);
-      }
+      if (saved) setCsvData(JSON.parse(saved));
     } catch {}
   }, []);
 
-  // Save to localStorage whenever csvData changes
   useEffect(() => {
     try {
-      if (Object.keys(csvData).length > 0) {
+      if (Object.keys(csvData).length > 0)
         localStorage.setItem(STORAGE_KEY, JSON.stringify(csvData));
-      }
     } catch {}
   }, [csvData]);
 
   const handleCSVImport = useCallback((subType: string, rows: any[]) => {
     setCsvData(prev => ({ ...prev, [subType]: rows }));
-    // Don't close modal — let user import more files
   }, []);
 
-  const handleClearData = useCallback((subType?: string) => {
-    if (subType) {
-      setCsvData(prev => {
-        const next = { ...prev };
-        delete next[subType];
-        return next;
-      });
-    } else {
-      setCsvData({});
-      localStorage.removeItem(STORAGE_KEY);
-    }
+  const handleClearData = useCallback(() => {
+    setCsvData({});
+    localStorage.removeItem(STORAGE_KEY);
   }, []);
 
   const titles: Record<string, string> = {
@@ -67,7 +52,7 @@ export default function DashboardPage() {
     <div style={{ display: "flex", minHeight: "100vh", background: "#080810", color: "white", fontFamily: "system-ui, sans-serif" }}>
       <Sidebar
         active={platform}
-        onChange={setPlatform}
+        onChange={p => { setPlatform(p); setDateRange("all"); }}
         onUpload={() => setShowUpload(true)}
         importedTypes={importedTypes}
       />
@@ -88,13 +73,13 @@ export default function DashboardPage() {
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             {importedTypes.length > 0 && (
               <button
-                onClick={() => handleClearData()}
+                onClick={handleClearData}
                 style={{ fontSize: 12, padding: "6px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(255,255,255,0.4)", cursor: "pointer" }}
               >
                 Clear all data
               </button>
             )}
-            <DateRangePicker value={dateRange} onChange={setDateRange} />
+            <DateRangePicker value={dateRange} onChange={setDateRange} platform={platform} />
           </div>
         </header>
 
