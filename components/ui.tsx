@@ -58,6 +58,7 @@ export function SectionLabel({ children }: { children: React.ReactNode }) {
 
 export function LikeDislikeBar({ likes, dislikes }: { likes: number; dislikes: number }) {
   const total = likes + dislikes;
+  if (total === 0) return null;
   const likeP = Math.round((likes / total) * 100);
   return (
     <div>
@@ -114,13 +115,14 @@ export function VideoCard({ id, thumb, title, publishedAt, badge, quickStats, ch
       style={{ borderRadius: 12, border: `1px solid ${open ? accentColor + "40" : "rgba(255,255,255,0.07)"}`, background: open ? accentColor + "08" : "rgba(255,255,255,0.03)", cursor: "pointer" }}
       onClick={() => setOpen(o => !o)}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px" }}>
-        <div style={{ width: 48, height: 36, borderRadius: 8, background: accentColor + "18", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 16px" }}>
+        <div style={{ width: 48, height: 36, borderRadius: 8, background: accentColor + "18", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0, marginTop: 2 }}>
           {thumb}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ color: "white", fontSize: 13, fontWeight: 500, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</p>
-          <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, margin: "2px 0 0" }}>
+          {/* Title now wraps fully — no truncation */}
+          <p style={{ color: "white", fontSize: 13, fontWeight: 500, margin: 0, lineHeight: 1.4 }}>{title}</p>
+          <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, margin: "4px 0 0" }}>
             {publishedAt}
             {badge && <span style={{ marginLeft: 8, fontSize: 10, padding: "1px 6px", borderRadius: 99, background: accentColor + "20", color: accentColor }}>{badge}</span>}
           </p>
@@ -133,7 +135,7 @@ export function VideoCard({ id, thumb, title, publishedAt, badge, quickStats, ch
             </div>
           ))}
         </div>
-        <span style={{ color: "rgba(255,255,255,0.25)", fontSize: 12, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</span>
+        <span style={{ color: "rgba(255,255,255,0.25)", fontSize: 12, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s", flexShrink: 0, marginTop: 4 }}>▼</span>
       </div>
       {open && (
         <div style={{ padding: "0 16px 16px", borderTop: `1px solid ${accentColor}20` }} onClick={e => e.stopPropagation()}>
