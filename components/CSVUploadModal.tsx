@@ -46,7 +46,7 @@ const FIELD_MAPS: Record<string, Record<string, string>> = {
     "Retention Rate (%)":       "retention",
     "Total Engagements":        "totalEngagement",
   },
-  // ─── Instagram — exact columns from Meta Content export ───────────────────
+  // Exact columns from Meta Instagram Content export
   "instagram": {
     "Post ID":        "postId",
     "Description":    "title",
@@ -62,7 +62,7 @@ const FIELD_MAPS: Record<string, Record<string, string>> = {
     "Comments":       "comments",
     "Saves":          "saves",
   },
-  // ─── Facebook — exact columns from Meta Content export ────────────────────
+  // Exact columns from Meta Facebook Content export
   "facebook": {
     "Post ID":                        "postId",
     "Title":                          "title",
@@ -102,13 +102,9 @@ function detectType(filename: string): string | null {
   return null;
 }
 
-// Robust CSV parser that handles:
-// - Quoted fields containing commas
-// - Quoted fields containing newlines (Meta export descriptions)
-// - Escaped quotes inside quoted fields ("")
-// - BOM character at start of file
+// Robust CSV parser — handles quoted fields with commas AND real newlines inside them
+// (Meta exports have multi-line descriptions inside quoted fields)
 function parseCSV(text: string): Record<string, string>[] {
-  // Strip BOM
   const t = text.startsWith("\uFEFF") ? text.slice(1) : text;
   const rows: string[][] = [];
   let cur = "", inQ = false, row: string[] = [];
@@ -116,12 +112,12 @@ function parseCSV(text: string): Record<string, string>[] {
   for (let i = 0; i < t.length; i++) {
     const ch = t[i], nx = t[i + 1];
     if (ch === '"') {
-      if (inQ && nx === '"') { cur += '"'; i++; } // escaped ""
+      if (inQ && nx === '"') { cur += '"'; i++; }
       else inQ = !inQ;
     } else if (ch === ',' && !inQ) {
       row.push(cur.trim()); cur = "";
     } else if ((ch === '\n' || ch === '\r') && !inQ) {
-      if (ch === '\r' && nx === '\n') i++; // handle \r\n
+      if (ch === '\r' && nx === '\n') i++;
       row.push(cur.trim()); cur = "";
       if (row.some(c => c !== "")) rows.push(row);
       row = [];
@@ -129,12 +125,7 @@ function parseCSV(text: string): Record<string, string>[] {
       cur += ch;
     }
   }
-  // Push last row
-  if (cur || row.length) {
-    row.push(cur.trim());
-    if (row.some(c => c !== "")) rows.push(row);
-  }
-
+  if (cur || row.length) { row.push(cur.trim()); if (row.some(c => c !== "")) rows.push(row); }
   if (rows.length < 2) return [];
   const headers = rows[0].map(h => h.trim());
   return rows.slice(1).map(vals => {
@@ -153,7 +144,7 @@ function parseDuration(val: string): number {
   return Number(val) || 0;
 }
 
-// Normalizes any date format to YYYY-MM for month filtering
+// Normalizes any date format → "YYYY-MM" for month filtering
 function normalizeDate(raw: string): string {
   if (!raw || raw.trim() === "") return "";
   const s = raw.trim();
@@ -181,12 +172,12 @@ function mapRow(row: Record<string, string>, fieldMap: Record<string, string>, i
     if (raw === "") continue;
     if (key === "publishedAt") {
       out[key] = raw;
-      out["publishedYM"] = normalizeDate(raw); // YYYY-MM for filtering
+      out["publishedYM"] = normalizeDate(raw);
     } else if (key === "avgViewDuration" && raw.includes(":")) {
       out[key] = parseDuration(raw);
     } else if (key === "title") {
-      // Take only first line — Meta descriptions are multi-line
-      out[key] = raw.split(/\r?\n/)[0].trim().slice(0, 120) || `Post ${idx + 1}`;
+      // Take first non-empty line — Meta descriptions are multi-line
+      out[key] = raw.split(/\r?\n/).find(l => l.trim() !== "")?.trim().slice(0, 120) || `Post ${idx + 1}`;
     } else {
       const num = parseFloat(raw.replace(/,/g, ""));
       out[key] = isNaN(num) ? raw : num;
@@ -196,15 +187,31 @@ function mapRow(row: Record<string, string>, fieldMap: Record<string, string>, i
   return out;
 }
 
+// ─── THE FIX: platform-aware row filter ──────────────────────────────────────
+// Each platform has different column names for the "ID" and "title" fields.
+// We check the right column per platform instead of guessing.
 function shouldSkipRow(row: Record<string, string>, type: string): boolean {
-  // YouTube: skip the "Total" summary row
-  if (type.startsWith("youtube")) {
+  if (type === "youtube-shorts" || type === "youtube-longform") {
+    // Skip the YouTube "Total" summary row (Content=Total, Video title=empty)
     const content = (row["Content"] || "").trim();
     const title   = (row["Video title"] || "").trim();
-    if (content === "Total" && title === "") return true;
+    return content === "Total" && title === "";
   }
-  // Never skip based on Date field — Meta sets Date="Lifetime" on ALL rows
-  // which is normal and should NOT be filtered out
+  if (type === "instagram") {
+    // Keep all rows that have a Post ID
+    // Never skip based on Date="Lifetime" — that's normal for Meta exports
+    const postId = (row["Post ID"] || "").trim();
+    return postId === "";
+  }
+  if (type === "facebook") {
+    // Keep all rows that have a Post ID
+    const postId = (row["Post ID"] || "").trim();
+    return postId === "";
+  }
+  if (type === "tiktok") {
+    const title = (row["Video Title"] || "").trim();
+    return title === "";
+  }
   return false;
 }
 
@@ -242,7 +249,7 @@ export default function CSVUploadModal({ platform, importedTypes, onImport, onCl
         .filter(r => !shouldSkipRow(r, type))
         .map((r, i) => mapRow(r, fieldMap, i));
       if (!mapped.length) {
-        setError("No valid rows found. Make sure you renamed the file correctly and it has data.");
+        setError("No valid rows found. Make sure the file is renamed correctly and contains data.");
         return;
       }
       setPreview(mapped.slice(0, 3));
