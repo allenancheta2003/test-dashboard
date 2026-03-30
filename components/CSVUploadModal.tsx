@@ -1,76 +1,75 @@
 "use client";
 import { useState, useRef } from "react";
 
-// ─── Exact column names from each platform's CSV export ──────────────────────
-
 const FIELD_MAPS: Record<string, Record<string, string>> = {
   "youtube-shorts": {
-    "Content":                        "videoId",
-    "Video title":                    "title",
-    "Video publish time":             "publishedAt",
-    "Duration":                       "duration",
-    "Average view duration":          "avgViewDuration",
-    "Stayed to watch (%)":            "stayedToWatch",
-    "Likes":                          "likes",
-    "Likes (vs. dislikes) (%)":       "likesPct",
-    "Comments added":                 "comments",
-    "Views":                          "views",
-    "Watch time (hours)":             "watchTimeHours",
+    "Content":                            "videoId",
+    "Video title":                        "title",
+    "Video publish time":                 "publishedAt",
+    "Duration":                           "duration",
+    "Average view duration":              "avgViewDuration",
+    "Stayed to watch (%)":                "stayedToWatch",
+    "Likes":                              "likes",
+    "Likes (vs. dislikes) (%)":           "likesPct",
+    "Comments added":                     "comments",
+    "Views":                              "views",
+    "Watch time (hours)":                 "watchTimeHours",
     "Impressions click-through rate (%)": "ctr",
-    "Subscribers":                    "subscribers",
+    "Subscribers":                        "subscribers",
   },
   "youtube-longform": {
-    "Content":                        "videoId",
-    "Video title":                    "title",
-    "Video publish time":             "publishedAt",
-    "Duration":                       "duration",
-    "Average view duration":          "avgViewDuration",
-    "Average percentage viewed":      "avgPctViewed",
-    "Likes":                          "likes",
-    "Likes (vs. dislikes) (%)":       "likesPct",
-    "Comments added":                 "comments",
-    "Views":                          "views",
-    "Watch time (hours)":             "watchTimeHours",
+    "Content":                            "videoId",
+    "Video title":                        "title",
+    "Video publish time":                 "publishedAt",
+    "Duration":                           "duration",
+    "Average view duration":              "avgViewDuration",
+    "Average percentage viewed (%)":      "avgPctViewed",
+    "Likes":                              "likes",
+    "Likes (vs. dislikes) (%)":           "likesPct",
+    "Comments added":                     "comments",
+    "Views":                              "views",
+    "Watch time (hours)":                 "watchTimeHours",
+    "Impressions":                        "impressions",
     "Impressions click-through rate (%)": "ctr",
-    "Subscribers":                    "subscribers",
+    "Subscribers":                        "subscribers",
   },
   "tiktok": {
-    "Video Title":                    "title",
-    "Date":                           "publishedAt",
-    "Views":                          "views",
-    "Likes":                          "likes",
-    "Comments":                       "comments",
-    "Shares":                         "shares",
-    "Saves":                          "saves",
-    "Average watch time (sec)":       "avgWatchTime",
-    "Total play time (sec)":          "duration",
-    "Retention Rate (%)":             "retention",
-    "Total Engagements":              "totalEngagement",
+    "Video Title":                        "title",
+    "Date":                               "publishedAt",
+    "Views":                              "views",
+    "Likes":                              "likes",
+    "Comments":                           "comments",
+    "Shares":                             "shares",
+    "Saves":                              "saves",
+    "Average watch time (sec)":           "avgWatchTime",
+    "Total play time (sec)":              "duration",
+    "Retention Rate (%)":                 "retention",
+    "Total Engagements":                  "totalEngagement",
   },
   "instagram": {
-    "Reel title":                     "title",
-    "Date":                           "publishedAt",
-    "Plays":                          "views",
-    "Likes":                          "likes",
-    "Comments":                       "comments",
-    "Shares":                         "shares",
-    "Saves":                          "saves",
-    "Reposts":                        "reposts",
-    "Average watch time (sec)":       "avgWatchTime",
-    "Duration (sec)":                 "duration",
-    "3s view rate (%)":               "viewRatePast3s",
-    "Retention (%)":                  "retention",
-    "Total Interactions":             "totalEngagement",
+    "Reel title":                         "title",
+    "Date":                               "publishedAt",
+    "Plays":                              "views",
+    "Likes":                              "likes",
+    "Comments":                           "comments",
+    "Shares":                             "shares",
+    "Saves":                              "saves",
+    "Reposts":                            "reposts",
+    "Average watch time (sec)":           "avgWatchTime",
+    "Duration (sec)":                     "duration",
+    "3s view rate (%)":                   "viewRatePast3s",
+    "Retention (%)":                      "retention",
+    "Total Interactions":                 "totalEngagement",
   },
   "facebook": {
-    "Post Title":                     "title",
-    "Date Published":                 "publishedAt",
-    "Reach":                          "reach",
-    "Impressions":                    "impressions",
-    "Likes":                          "likes",
-    "Comments":                       "comments",
-    "Shares":                         "shares",
-    "Link Clicks":                    "clicks",
+    "Post Title":                         "title",
+    "Date Published":                     "publishedAt",
+    "Reach":                              "reach",
+    "Impressions":                        "impressions",
+    "Likes":                              "likes",
+    "Comments":                           "comments",
+    "Shares":                             "shares",
+    "Link Clicks":                        "clicks",
   },
 };
 
@@ -82,22 +81,19 @@ const TYPE_LABELS: Record<string, string> = {
   "facebook":         "Facebook",
 };
 
-// Detect type from filename
 function detectType(filename: string): string | null {
   const f = filename.toLowerCase().replace(/\s+/g, "-");
-  if (f.includes("youtube-shorts") || f.includes("yt-shorts"))              return "youtube-shorts";
-  if (f.includes("youtube-longform") || f.includes("yt-longform"))           return "youtube-longform";
-  if (f.includes("tiktok"))                                                   return "tiktok";
-  if (f.includes("instagram"))                                                return "instagram";
-  if (f.includes("facebook"))                                                 return "facebook";
+  if (f.includes("youtube-shorts") || f.includes("yt-shorts"))    return "youtube-shorts";
+  if (f.includes("youtube-longform") || f.includes("yt-longform")) return "youtube-longform";
+  if (f.includes("tiktok"))                                         return "tiktok";
+  if (f.includes("instagram"))                                      return "instagram";
+  if (f.includes("facebook"))                                       return "facebook";
   return null;
 }
 
-// Parse CSV text into array of row objects
 function parseCSV(text: string): Record<string, string>[] {
   const lines = text.trim().split(/\r?\n/);
   if (lines.length < 2) return [];
-  // Handle quoted fields properly
   function splitLine(line: string): string[] {
     const result: string[] = [];
     let cur = "", inQ = false;
@@ -119,7 +115,6 @@ function parseCSV(text: string): Record<string, string>[] {
   });
 }
 
-// Convert "0:01:23" or "0:00:50" to seconds
 function parseDuration(val: string): number {
   if (!val) return 0;
   const parts = val.split(":").map(Number);
@@ -128,13 +123,11 @@ function parseDuration(val: string): number {
   return Number(val) || 0;
 }
 
-// Map a raw CSV row to our internal format
 function mapRow(row: Record<string, string>, fieldMap: Record<string, string>, idx: number): any {
   const out: any = { id: `csv_${idx}`, thumb: "🎬" };
   for (const [csvCol, key] of Object.entries(fieldMap)) {
     const raw = (row[csvCol] ?? "").trim();
     if (raw === "") continue;
-    // Duration fields that look like "0:00:50" → convert to seconds
     if (key === "avgViewDuration" && raw.includes(":")) {
       out[key] = parseDuration(raw);
     } else {
@@ -192,7 +185,6 @@ export default function CSVUploadModal({ platform, importedTypes, onImport, onCl
   const handleConfirm = () => {
     if (fullData && detectedType) {
       onImport(detectedType, fullData);
-      // Reset for next upload — DON'T close modal
       setPreview(null); setDetectedType(null); setFullData(null); setFileName("");
     }
   };
@@ -201,7 +193,6 @@ export default function CSVUploadModal({ platform, importedTypes, onImport, onCl
     <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.75)" }}>
       <div style={{ width: "100%", maxWidth: 580, margin: "0 16px", background: "#0f0f1a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 20, overflow: "hidden", maxHeight: "90vh", overflowY: "auto" }}>
 
-        {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid rgba(255,255,255,0.07)", position: "sticky", top: 0, background: "#0f0f1a", zIndex: 1 }}>
           <div>
             <h2 style={{ margin: 0, color: "white", fontSize: 16, fontWeight: 600 }}>Import CSV Data</h2>
@@ -214,7 +205,6 @@ export default function CSVUploadModal({ platform, importedTypes, onImport, onCl
 
         <div style={{ padding: 24 }}>
 
-          {/* Already imported badges */}
           {importedTypes.length > 0 && (
             <div style={{ marginBottom: 20 }}>
               <p style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 8 }}>Already imported this session:</p>
@@ -228,7 +218,6 @@ export default function CSVUploadModal({ platform, importedTypes, onImport, onCl
             </div>
           )}
 
-          {/* Naming guide */}
           <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 12, padding: 16, marginBottom: 20 }}>
             <p style={{ margin: "0 0 10px", fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
               Rename your file before uploading
@@ -247,14 +236,12 @@ export default function CSVUploadModal({ platform, importedTypes, onImport, onCl
             })}
           </div>
 
-          {/* Detected type badge */}
           {detectedType && !preview && (
             <div style={{ marginBottom: 16, padding: "8px 14px", background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.3)", borderRadius: 8, fontSize: 13, color: "#22c55e" }}>
               ✓ Detected: <strong>{TYPE_LABELS[detectedType]}</strong>
             </div>
           )}
 
-          {/* Drop zone — always visible unless showing preview */}
           {!preview && (
             <>
               <div
@@ -277,7 +264,6 @@ export default function CSVUploadModal({ platform, importedTypes, onImport, onCl
             </>
           )}
 
-          {/* Preview */}
           {preview && detectedType && (
             <div>
               <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 13, marginBottom: 12 }}>
@@ -297,7 +283,7 @@ export default function CSVUploadModal({ platform, importedTypes, onImport, onCl
                       <tr key={i} style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
                         {["title","publishedAt","views","likes","duration"].map(k => (
                           <td key={k} style={{ color: "rgba(255,255,255,0.6)", padding: "6px 12px 6px 0", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {row[k] !== undefined ? String(row[k]).slice(0, 25) : "—"}
+                            {row[k] !== undefined ? String(row[k]) : "—"}
                           </td>
                         ))}
                       </tr>
