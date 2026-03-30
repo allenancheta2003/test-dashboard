@@ -46,30 +46,41 @@ const FIELD_MAPS: Record<string, Record<string, string>> = {
     "Retention Rate (%)":                 "retention",
     "Total Engagements":                  "totalEngagement",
   },
+  // ─── Instagram — exact columns from Meta Content export ───────────────────
   "instagram": {
-    "Reel title":                         "title",
-    "Date":                               "publishedAt",
-    "Plays":                              "views",
-    "Likes":                              "likes",
-    "Comments":                           "comments",
-    "Shares":                             "shares",
-    "Saves":                              "saves",
-    "Reposts":                            "reposts",
-    "Average watch time (sec)":           "avgWatchTime",
-    "Duration (sec)":                     "duration",
-    "3s view rate (%)":                   "viewRatePast3s",
-    "Retention (%)":                      "retention",
-    "Total Interactions":                 "totalEngagement",
+    "Post ID":        "postId",
+    "Description":    "title",
+    "Duration (sec)": "duration",
+    "Publish time":   "publishedAt",   // format: "04/04/2025 16:09"
+    "Permalink":      "permalink",
+    "Post type":      "format",
+    "Views":          "views",
+    "Reach":          "reach",
+    "Likes":          "likes",
+    "Shares":         "shares",
+    "Follows":        "follows",
+    "Comments":       "comments",
+    "Saves":          "saves",
   },
+  // ─── Facebook — exact columns from Meta Content export ────────────────────
   "facebook": {
-    "Post Title":                         "title",
-    "Date Published":                     "publishedAt",
-    "Reach":                              "reach",
-    "Impressions":                        "impressions",
-    "Likes":                              "likes",
-    "Comments":                           "comments",
-    "Shares":                             "shares",
-    "Link Clicks":                        "clicks",
+    "Post ID":                        "postId",
+    "Title":                          "title",
+    "Description":                    "description",
+    "Duration (sec)":                 "duration",
+    "Publish time":                   "publishedAt",  // format: "03/28/2026 18:16"
+    "Permalink":                      "permalink",
+    "Post type":                      "format",
+    "Views":                          "views",
+    "Reach":                          "reach",
+    "Reactions, Comments and Shares": "totalEngagement",
+    "Reactions":                      "reactions",
+    "Comments":                       "comments",
+    "Shares":                         "shares",
+    "Total clicks":                   "clicks",
+    "3-second video views":           "views3s",
+    "Seconds viewed":                 "secondsViewed",
+    "Average Seconds viewed":         "avgSecondsViewed",
   },
 };
 
@@ -83,7 +94,7 @@ const TYPE_LABELS: Record<string, string> = {
 
 function detectType(filename: string): string | null {
   const f = filename.toLowerCase().replace(/\s+/g, "-");
-  if (f.includes("youtube-shorts") || f.includes("yt-shorts"))    return "youtube-shorts";
+  if (f.includes("youtube-shorts") || f.includes("yt-shorts"))     return "youtube-shorts";
   if (f.includes("youtube-longform") || f.includes("yt-longform")) return "youtube-longform";
   if (f.includes("tiktok"))                                         return "tiktok";
   if (f.includes("instagram"))                                      return "instagram";
@@ -91,30 +102,40 @@ function detectType(filename: string): string | null {
   return null;
 }
 
+// Robust CSV parser — handles quoted fields containing commas and newlines
+// (Meta exports have descriptions with newlines inside quoted fields)
 function parseCSV(text: string): Record<string, string>[] {
-  const lines = text.trim().split(/\r?\n/);
-  if (lines.length < 2) return [];
-  function splitLine(line: string): string[] {
-    const result: string[] = [];
-    let cur = "", inQ = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '"') { inQ = !inQ; }
-      else if (ch === ',' && !inQ) { result.push(cur.trim()); cur = ""; }
-      else { cur += ch; }
+  const rows: string[][] = [];
+  let cur = "", inQ = false, row: string[] = [];
+  // Strip BOM if present
+  const t = text.startsWith("\uFEFF") ? text.slice(1) : text;
+  for (let i = 0; i < t.length; i++) {
+    const ch = t[i], nx = t[i + 1];
+    if (ch === '"') {
+      if (inQ && nx === '"') { cur += '"'; i++; } // escaped quote
+      else inQ = !inQ;
+    } else if (ch === ',' && !inQ) {
+      row.push(cur.trim()); cur = "";
+    } else if ((ch === '\n' || ch === '\r') && !inQ) {
+      if (ch === '\r' && nx === '\n') i++;
+      row.push(cur.trim()); cur = "";
+      if (row.some(c => c !== "")) rows.push(row);
+      row = [];
+    } else {
+      cur += ch;
     }
-    result.push(cur.trim());
-    return result;
   }
-  const headers = splitLine(lines[0]);
-  return lines.slice(1).map(line => {
-    const vals = splitLine(line);
-    const row: Record<string, string> = {};
-    headers.forEach((h, i) => { row[h] = vals[i] ?? ""; });
-    return row;
+  if (cur || row.length) { row.push(cur.trim()); if (row.some(c => c !== "")) rows.push(row); }
+  if (rows.length < 2) return [];
+  const headers = rows[0].map(h => h.replace(/^\uFEFF/, "").trim());
+  return rows.slice(1).map(vals => {
+    const obj: Record<string, string> = {};
+    headers.forEach((h, i) => { obj[h] = vals[i] ?? ""; });
+    return obj;
   });
 }
 
+// Converts "0:01:23" or "0:00:50" → seconds
 function parseDuration(val: string): number {
   if (!val) return 0;
   const parts = val.split(":").map(Number);
@@ -123,13 +144,41 @@ function parseDuration(val: string): number {
   return Number(val) || 0;
 }
 
+// Normalizes date strings to YYYY-MM for month filtering
+// Handles: "04/04/2025 16:09", "Apr 25, 2024", "2024-04-25"
+function normalizeDate(raw: string): string {
+  if (!raw || raw.trim() === "") return "";
+  const s = raw.trim();
+  // MM/DD/YYYY HH:MM (Meta export format)
+  const mmddyyyy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (mmddyyyy) return `${mmddyyyy[3]}-${mmddyyyy[1].padStart(2, "0")}`;
+  // YYYY-MM-DD
+  if (/^\d{4}-\d{2}/.test(s)) return s.slice(0, 7);
+  // Mon DD, YYYY (YouTube format)
+  const months: Record<string, string> = {
+    jan:"01",feb:"02",mar:"03",apr:"04",may:"05",jun:"06",
+    jul:"07",aug:"08",sep:"09",oct:"10",nov:"11",dec:"12"
+  };
+  const mdy = s.match(/^([A-Za-z]{3})\s+\d+,\s*(\d{4})/);
+  if (mdy) { const mo = months[mdy[1].toLowerCase()]; if (mo) return `${mdy[2]}-${mo}`; }
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+  return "";
+}
+
 function mapRow(row: Record<string, string>, fieldMap: Record<string, string>, idx: number): any {
   const out: any = { id: `csv_${idx}`, thumb: "🎬" };
   for (const [csvCol, key] of Object.entries(fieldMap)) {
     const raw = (row[csvCol] ?? "").trim();
     if (raw === "") continue;
-    if (key === "avgViewDuration" && raw.includes(":")) {
+    if (key === "publishedAt") {
+      out[key] = raw;                        // keep original string for display
+      out["publishedYM"] = normalizeDate(raw); // YYYY-MM for month filtering
+    } else if (key === "avgViewDuration" && raw.includes(":")) {
       out[key] = parseDuration(raw);
+    } else if (key === "title") {
+      // Use first non-empty line (Meta descriptions can be multi-line)
+      out[key] = raw.split(/\r?\n/)[0].trim().slice(0, 120) || `Post ${idx + 1}`;
     } else {
       const num = parseFloat(raw.replace(/,/g, ""));
       out[key] = isNaN(num) ? raw : num;
@@ -171,9 +220,14 @@ export default function CSVUploadModal({ platform, importedTypes, onImport, onCl
       const fieldMap = FIELD_MAPS[type];
       const mapped = rows
         .filter(r => {
-          const title = r["Video title"] || r["Video Title"] || r["Reel title"] || r["Post Title"] || "";
-          const content = r["Content"] || "";
-          return title.trim() !== "" && content.trim() !== "Total";
+          // Skip summary/total rows that Meta adds
+          const date = r["Date"] || r["Publish time"] || "";
+          if (date === "Lifetime" || date === "Total") return false;
+          // Must have some identifiable content
+          const title = r["Video title"] || r["Video Title"] || r["Reel title"] ||
+                        r["Post Title"] || r["Description"] || r["Title"] || "";
+          const id    = r["Post ID"] || r["Content"] || "";
+          return title.trim() !== "" || id.trim() !== "";
         })
         .map((r, i) => mapRow(r, fieldMap, i));
       setPreview(mapped.slice(0, 3));
