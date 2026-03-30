@@ -9,12 +9,37 @@ import {
 
 const COLOR = "#FF4444";
 
+// Handles both "Mar 25, 2026" and "2026-03-25" formats
+function parseVideoDate(dateStr: string): string {
+  if (!dateStr || dateStr.trim() === "" || dateStr.trim() === "—") return "";
+  const s = dateStr.trim();
+  // Already in YYYY-MM format
+  if (/^\d{4}-\d{2}$/.test(s)) return s;
+  // YYYY-MM-DD format
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 7);
+  // "Mar 25, 2026" or "Mar 2026" format
+  const months: Record<string, string> = {
+    jan:"01", feb:"02", mar:"03", apr:"04", may:"05", jun:"06",
+    jul:"07", aug:"08", sep:"09", oct:"10", nov:"11", dec:"12"
+  };
+  const match = s.match(/^([A-Za-z]{3})\s+(?:\d+,\s*)?(\d{4})$/);
+  if (match) {
+    const m = months[match[1].toLowerCase()];
+    if (m) return `${match[2]}-${m}`;
+  }
+  // Try native Date parse as fallback
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  }
+  return "";
+}
+
 function filterByMonth(videos: any[], dateRange: string) {
   if (dateRange === "all") return videos;
   return videos.filter((v: any) => {
-    if (!v.publishedAt) return true;
-    const d = new Date(v.publishedAt);
-    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const ym = parseVideoDate(v.publishedAt || v["Video publish time"] || "");
+    if (!ym) return false;
     return ym === dateRange;
   });
 }
@@ -26,8 +51,19 @@ export default function YouTubeView({ dateRange, shortsCsvData, longCsvData }: {
 }) {
   const [format, setFormat] = useState<"shorts" | "longform">("shorts");
 
-  const shortsVideos = filterByMonth(shortsCsvData?.length ? shortsCsvData : ytShorts, dateRange);
-  const longVideos   = filterByMonth(longCsvData?.length   ? longCsvData   : ytLongform, dateRange);
+  // If shortsCsvData has content, ALL of it goes into Shorts
+  // Only split into longform if longCsvData is separately imported
+  const allImported = shortsCsvData?.length ? shortsCsvData : null;
+
+  const shortsVideos = filterByMonth(
+    allImported ? allImported : ytShorts,
+    dateRange
+  );
+
+  const longVideos = filterByMonth(
+    longCsvData?.length ? longCsvData : ytLongform,
+    dateRange
+  );
 
   return (
     <div>
@@ -46,16 +82,16 @@ export default function YouTubeView({ dateRange, shortsCsvData, longCsvData }: {
 }
 
 function ShortsSection({ videos }: { videos: any[] }) {
-  const totViews    = videos.reduce((a: number, v: any) => a + (v.views || 0), 0);
-  const totLikes    = videos.reduce((a: number, v: any) => a + (v.likes || 0), 0);
-  const totComments = videos.reduce((a: number, v: any) => a + (v.comments || 0), 0);
-  const totSubs     = videos.reduce((a: number, v: any) => a + (v.subscribers || 0), 0);
-  const avgStayed   = videos.length ? Math.round(videos.reduce((a: number, v: any) => a + (v.stayedToWatch || 0), 0) / videos.length) : 0;
-  const avgAvd      = videos.length ? Math.round(videos.reduce((a: number, v: any) => a + (v.avgViewDuration || 0), 0) / videos.length) : 0;
+  const totViews    = videos.reduce((a: number, v: any) => a + (Number(v.views)       || 0), 0);
+  const totLikes    = videos.reduce((a: number, v: any) => a + (Number(v.likes)       || 0), 0);
+  const totComments = videos.reduce((a: number, v: any) => a + (Number(v.comments)    || 0), 0);
+  const totSubs     = videos.reduce((a: number, v: any) => a + (Number(v.subscribers) || 0), 0);
+  const totImpr     = videos.reduce((a: number, v: any) => a + (Number(v.impressions) || 0), 0);
+  const avgCTR      = videos.length ? (videos.reduce((a: number, v: any) => a + (Number(v.ctr) || 0), 0) / videos.length).toFixed(1) : "0.0";
 
   if (!videos.length) return (
-    <div style={{ textAlign: "center", padding: 60, color: "rgba(255,255,255,0.3)" }}>
-      No Shorts data for this month. Try importing a CSV or selecting a different month.
+    <div style={{ textAlign: "center", padding: 60, color: "rgba(255,255,255,0.3)", fontSize: 14 }}>
+      No Shorts data for this period. Import a CSV or select a different month.
     </div>
   );
 
@@ -63,50 +99,57 @@ function ShortsSection({ videos }: { videos: any[] }) {
     <>
       <SectionLabel>Shorts overview · {videos.length} videos</SectionLabel>
       <OverviewGrid>
-        <MetricCard label="Total views"          value={fmt(totViews)}    accent={COLOR} />
-        <MetricCard label="Total likes"          value={fmt(totLikes)}    accent={COLOR} />
-        <MetricCard label="Total comments"       value={fmt(totComments)} accent={COLOR} />
-        <MetricCard label="Subscribers gained"   value={`+${fmt(totSubs)}`} accent={COLOR} />
-        <MetricCard label="Avg. stayed to watch" value={`${avgStayed}%`} accent={COLOR} bar={avgStayed} />
+        <MetricCard label="Total views"        value={fmt(totViews)}    accent={COLOR} />
+        <MetricCard label="Total likes"        value={fmt(totLikes)}    accent={COLOR} />
+        <MetricCard label="Total comments"     value={fmt(totComments)} accent={COLOR} />
+        <MetricCard label="Subscribers gained" value={`+${fmt(totSubs)}`} accent={COLOR} />
+        <MetricCard label="Total impressions"  value={fmt(totImpr)}     accent={COLOR} />
+        <MetricCard label="Avg. CTR"           value={`${avgCTR}%`}     accent={COLOR} bar={parseFloat(avgCTR) * 10} />
       </OverviewGrid>
 
       <SectionLabel>Videos — click to expand</SectionLabel>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {videos.map((v: any, i: number) => {
-          const likes    = v.likes    || 0;
-          const dislikes = v.dislikes || 0;
+          const likes    = Number(v.likes)    || 0;
+          const dislikes = Number(v.dislikes) || 0;
+          const dur      = Number(v.duration) || 0;
           const likeRatio = likes + dislikes > 0 ? Math.round(likes / (likes + dislikes) * 100) : 100;
           return (
             <VideoCard
-              key={v.id || i}
+              key={v.id || v.Content || i}
               id={String(v.id || i)}
               thumb={v.thumb || "🎬"}
               title={v.title || "Untitled"}
               publishedAt={v.publishedAt || ""}
-              badge={v.duration ? fmtSec(v.duration) : undefined}
+              badge={dur > 0 ? fmtSec(dur) : undefined}
               accentColor={COLOR}
               quickStats={[
-                { label: "views",    value: fmt(v.views || 0) },
-                { label: "likes",    value: fmt(v.likes || 0) },
-                { label: "retained", value: `${v.stayedToWatch || 0}%` },
+                { label: "views",       value: fmt(Number(v.views) || 0) },
+                { label: "likes",       value: fmt(likes) },
+                { label: "impressions", value: fmt(Number(v.impressions) || 0) },
               ]}
             >
               <div style={{ paddingTop: 12 }}>
-                <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Performance</p>
+                <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>
+                  All metrics
+                </p>
                 <InlineMetrics items={[
-                  { label: "Views",              value: fmt(v.views || 0) },
-                  { label: "Duration",           value: v.duration ? fmtSec(v.duration) : "—", sub: v.duration ? `${v.duration}s` : undefined },
-                  { label: "Avg. view duration", value: v.avgViewDuration ? fmtSec(v.avgViewDuration) : "—", sub: v.avgViewDuration ? `${v.avgViewDuration}s` : undefined },
-                  { label: "Stayed to watch",    value: `${v.stayedToWatch || 0}%` },
-                  { label: "Comments",           value: fmt(v.comments || 0) },
-                  { label: "Likes",              value: fmt(v.likes || 0) },
-                  { label: "Subscribers gained", value: `+${fmt(v.subscribers || 0)}` },
-                  { label: "Impressions",        value: fmt(v.impressions || 0) },
-                  { label: "CTR",                value: v.ctr ? `${v.ctr}%` : "—" },
+                  { label: "Views",              value: fmt(Number(v.views)       || 0) },
+                  { label: "Duration",           value: dur > 0 ? fmtSec(dur) : "—", sub: dur > 0 ? `${dur}s` : undefined },
+                  { label: "Avg. view duration", value: v.avgViewDuration ? fmtSec(Number(v.avgViewDuration)) : "—" },
+                  { label: "Stayed to watch",    value: v.stayedToWatch ? `${v.stayedToWatch}%` : "—" },
+                  { label: "Comments",           value: fmt(Number(v.comments)    || 0) },
+                  { label: "Likes",              value: fmt(likes) },
+                  { label: "Subscribers gained", value: `+${fmt(Number(v.subscribers) || 0)}` },
+                  { label: "Impressions",        value: fmt(Number(v.impressions)  || 0) },
+                  { label: "CTR",                value: v.ctr ? `${Number(v.ctr).toFixed(1)}%` : "—" },
+                  { label: "Watch time (hrs)",   value: v.watchTimeHours ? `${Number(v.watchTimeHours).toFixed(1)}h` : "—" },
                 ]} />
 
                 <div style={{ marginTop: 16 }}>
-                  <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Likes vs. dislikes</p>
+                  <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>
+                    Likes vs. dislikes
+                  </p>
                   <LikeDislikeBar likes={likes} dislikes={dislikes} />
                   <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 11, marginTop: 4 }}>
                     {fmt(likes)} likes · {fmt(dislikes)} dislikes · {likeRatio}% positive
@@ -115,7 +158,9 @@ function ShortsSection({ videos }: { videos: any[] }) {
 
                 {v.discovery && (
                   <div style={{ marginTop: 16 }}>
-                    <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>How viewers find this Short</p>
+                    <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>
+                      How viewers find this Short
+                    </p>
                     <DiscoveryBars color={COLOR} data={{
                       "Suggested videos": v.discovery.suggested || 0,
                       "Hashtag page":     v.discovery.hashtag   || 0,
@@ -135,15 +180,15 @@ function ShortsSection({ videos }: { videos: any[] }) {
 }
 
 function LongformSection({ videos }: { videos: any[] }) {
-  const totViews  = videos.reduce((a: number, v: any) => a + (v.views || 0), 0);
-  const totLikes  = videos.reduce((a: number, v: any) => a + (v.likes || 0), 0);
-  const avgCTR    = videos.length ? (videos.reduce((a: number, v: any) => a + (v.ctr || 0), 0) / videos.length).toFixed(1) : "0.0";
-  const avgSEO    = videos.length ? Math.round(videos.reduce((a: number, v: any) => a + (v.seoScore || 0), 0) / videos.length) : 0;
-  const avgPct    = videos.length ? (videos.reduce((a: number, v: any) => a + (v.avgPctViewed || 0), 0) / videos.length).toFixed(1) : "0.0";
+  const totViews = videos.reduce((a: number, v: any) => a + (Number(v.views) || 0), 0);
+  const totLikes = videos.reduce((a: number, v: any) => a + (Number(v.likes) || 0), 0);
+  const avgCTR   = videos.length ? (videos.reduce((a: number, v: any) => a + (Number(v.ctr) || 0), 0) / videos.length).toFixed(1) : "0.0";
+  const avgSEO   = videos.length ? Math.round(videos.reduce((a: number, v: any) => a + (Number(v.seoScore) || 0), 0) / videos.length) : 0;
+  const avgPct   = videos.length ? (videos.reduce((a: number, v: any) => a + (Number(v.avgPctViewed) || 0), 0) / videos.length).toFixed(1) : "0.0";
 
   if (!videos.length) return (
-    <div style={{ textAlign: "center", padding: 60, color: "rgba(255,255,255,0.3)" }}>
-      No Long-form data for this month. Try importing a CSV or selecting a different month.
+    <div style={{ textAlign: "center", padding: 60, color: "rgba(255,255,255,0.3)", fontSize: 14 }}>
+      No Long-form data for this period. Import a <code>youtube-longform.csv</code> file using the Import CSV button.
     </div>
   );
 
@@ -161,8 +206,9 @@ function LongformSection({ videos }: { videos: any[] }) {
       <SectionLabel>Videos — click to expand</SectionLabel>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {videos.map((v: any, i: number) => {
-          const likes    = v.likes    || 0;
-          const dislikes = v.dislikes || 0;
+          const likes    = Number(v.likes)    || 0;
+          const dislikes = Number(v.dislikes) || 0;
+          const dur      = Number(v.duration) || 0;
           const likeRatio = likes + dislikes > 0 ? Math.round(likes / (likes + dislikes) * 100) : 100;
           return (
             <VideoCard
@@ -171,52 +217,30 @@ function LongformSection({ videos }: { videos: any[] }) {
               thumb={v.thumb || "🎬"}
               title={v.title || "Untitled"}
               publishedAt={v.publishedAt || ""}
-              badge={v.duration ? fmtSec(v.duration) : undefined}
+              badge={dur > 0 ? fmtSec(dur) : undefined}
               accentColor={COLOR}
               quickStats={[
-                { label: "views",      value: fmt(v.views || 0) },
-                { label: "avg viewed", value: `${v.avgPctViewed || 0}%` },
-                { label: "CTR",        value: `${v.ctr || 0}%` },
+                { label: "views",      value: fmt(Number(v.views) || 0) },
+                { label: "avg viewed", value: `${Number(v.avgPctViewed) || 0}%` },
+                { label: "CTR",        value: `${Number(v.ctr) || 0}%` },
               ]}
             >
               <div style={{ paddingTop: 12 }}>
-                <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Performance</p>
                 <InlineMetrics items={[
-                  { label: "Views",              value: fmt(v.views || 0) },
-                  { label: "Duration",           value: v.duration ? fmtSec(v.duration) : "—", sub: v.duration ? `${v.duration}s` : undefined },
-                  { label: "Avg. view duration", value: v.avgViewDuration ? fmtSec(v.avgViewDuration) : "—", sub: v.avgViewDuration ? `${v.avgViewDuration}s` : undefined },
-                  { label: "Avg. % viewed",      value: `${v.avgPctViewed || 0}%` },
-                  { label: "CTR",                value: `${v.ctr || 0}%` },
+                  { label: "Views",              value: fmt(Number(v.views) || 0) },
+                  { label: "Duration",           value: dur > 0 ? fmtSec(dur) : "—" },
+                  { label: "Avg. view duration", value: v.avgViewDuration ? fmtSec(Number(v.avgViewDuration)) : "—" },
+                  { label: "Avg. % viewed",      value: `${Number(v.avgPctViewed) || 0}%` },
+                  { label: "CTR",                value: v.ctr ? `${Number(v.ctr).toFixed(1)}%` : "—" },
                   { label: "SEO score",          value: v.seoScore ? `${v.seoScore}/100` : "—" },
-                  { label: "Comments",           value: fmt(v.comments || 0) },
-                  { label: "Likes",              value: fmt(v.likes || 0) },
-                  { label: "Subscribers gained", value: `+${fmt(v.subscribers || 0)}` },
-                  { label: "Impressions",        value: fmt(v.impressions || 0) },
+                  { label: "Comments",           value: fmt(Number(v.comments) || 0) },
+                  { label: "Likes",              value: fmt(likes) },
+                  { label: "Subscribers gained", value: `+${fmt(Number(v.subscribers) || 0)}` },
+                  { label: "Impressions",        value: fmt(Number(v.impressions) || 0) },
                 ]} />
-
                 <div style={{ marginTop: 16 }}>
                   <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Likes vs. dislikes</p>
                   <LikeDislikeBar likes={likes} dislikes={dislikes} />
-                  <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 11, marginTop: 4 }}>
-                    {fmt(likes)} likes · {fmt(dislikes)} dislikes · {likeRatio}% positive
-                  </p>
-                </div>
-
-                <div style={{ marginTop: 16, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                  <div>
-                    <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 10, marginBottom: 4 }}>SEO score</p>
-                    <div style={{ height: 8, borderRadius: 99, background: "rgba(255,255,255,0.1)", overflow: "hidden" }}>
-                      <div style={{ width: `${v.seoScore || 0}%`, height: "100%", background: COLOR, borderRadius: 99 }} />
-                    </div>
-                    <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, marginTop: 4 }}>{v.seoScore || 0}/100</p>
-                  </div>
-                  <div>
-                    <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 10, marginBottom: 4 }}>Click-through rate</p>
-                    <div style={{ height: 8, borderRadius: 99, background: "rgba(255,255,255,0.1)", overflow: "hidden" }}>
-                      <div style={{ width: `${(v.ctr || 0) * 10}%`, height: "100%", background: COLOR, borderRadius: 99 }} />
-                    </div>
-                    <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, marginTop: 4 }}>{v.ctr || 0}%</p>
-                  </div>
                 </div>
               </div>
             </VideoCard>
