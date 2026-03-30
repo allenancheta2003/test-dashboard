@@ -5,14 +5,27 @@ import { MetricCard, OverviewGrid, SectionLabel, VideoCard, InlineMetrics, fmt }
 const COLOR = "#1877F2";
 
 export default function FacebookView({ dateRange, csvData }: { dateRange: string; csvData?: any[] }) {
-  const posts = csvData?.length ? csvData : fbPosts;
+  const allPosts = csvData?.length ? csvData : fbPosts;
 
-  const totReach  = posts.reduce((a: number, v: any) => a + v.reach, 0);
-  const totImp    = posts.reduce((a: number, v: any) => a + v.impressions, 0);
-  const totLikes  = posts.reduce((a: number, v: any) => a + v.likes, 0);
-  const totCom    = posts.reduce((a: number, v: any) => a + v.comments, 0);
-  const totShares = posts.reduce((a: number, v: any) => a + v.shares, 0);
-  const totClicks = posts.reduce((a: number, v: any) => a + v.clicks, 0);
+  const posts = dateRange === "all" ? allPosts : allPosts.filter((v: any) => {
+    if (!v.publishedAt) return true;
+    const d = new Date(v.publishedAt);
+    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    return ym === dateRange;
+  });
+
+  const totReach  = posts.reduce((a: number, v: any) => a + (v.reach  || 0), 0);
+  const totImp    = posts.reduce((a: number, v: any) => a + (v.impressions || 0), 0);
+  const totLikes  = posts.reduce((a: number, v: any) => a + (v.likes  || 0), 0);
+  const totCom    = posts.reduce((a: number, v: any) => a + (v.comments || 0), 0);
+  const totShares = posts.reduce((a: number, v: any) => a + (v.shares || 0), 0);
+  const totClicks = posts.reduce((a: number, v: any) => a + (v.clicks || 0), 0);
+
+  if (!posts.length) return (
+    <div style={{ textAlign: "center", padding: 60, color: "rgba(255,255,255,0.3)" }}>
+      No Facebook data for this month. Try importing a CSV or selecting a different month.
+    </div>
+  );
 
   return (
     <>
@@ -27,25 +40,29 @@ export default function FacebookView({ dateRange, csvData }: { dateRange: string
       </OverviewGrid>
 
       <SectionLabel>Posts — click to expand</SectionLabel>
-      <div className="flex flex-col gap-2">
-        {posts.map((v: any) => (
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {posts.map((v: any, i: number) => (
           <VideoCard
-            key={v.id} id={v.id} thumb={v.thumb} title={v.title} publishedAt={v.publishedAt}
+            key={v.id || i}
+            id={String(v.id || i)}
+            thumb={v.thumb || "📄"}
+            title={v.title || "Untitled"}
+            publishedAt={v.publishedAt || ""}
             accentColor={COLOR}
             quickStats={[
-              { label: "reach",    value: fmt(v.reach) },
-              { label: "likes",    value: fmt(v.likes) },
-              { label: "clicks",   value: fmt(v.clicks) },
+              { label: "reach",  value: fmt(v.reach  || 0) },
+              { label: "likes",  value: fmt(v.likes  || 0) },
+              { label: "clicks", value: fmt(v.clicks || 0) },
             ]}
           >
-            <div className="pt-3">
+            <div style={{ paddingTop: 12 }}>
               <InlineMetrics items={[
-                { label: "Reach",        value: fmt(v.reach) },
-                { label: "Impressions",  value: fmt(v.impressions) },
-                { label: "Likes",        value: fmt(v.likes) },
-                { label: "Comments",     value: fmt(v.comments) },
-                { label: "Shares",       value: fmt(v.shares) },
-                { label: "Link clicks",  value: fmt(v.clicks) },
+                { label: "Reach",       value: fmt(v.reach       || 0) },
+                { label: "Impressions", value: fmt(v.impressions || 0) },
+                { label: "Likes",       value: fmt(v.likes       || 0) },
+                { label: "Comments",    value: fmt(v.comments    || 0) },
+                { label: "Shares",      value: fmt(v.shares      || 0) },
+                { label: "Link clicks", value: fmt(v.clicks      || 0) },
               ]} />
             </div>
           </VideoCard>
