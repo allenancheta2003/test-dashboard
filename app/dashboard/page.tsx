@@ -8,35 +8,52 @@ import InstagramView from "@/components/views/InstagramView";
 import FacebookView from "@/components/views/FacebookView";
 import CSVUploadModal from "@/components/CSVUploadModal";
 
-const STORAGE_KEY = "dashboard_csv_data";
-
 export default function DashboardPage() {
   const [platform, setPlatform]     = useState("youtube");
   const [dateRange, setDateRange]   = useState<string>("all");
   const [showUpload, setShowUpload] = useState(false);
   const [csvData, setCsvData]       = useState<Record<string, any[]>>({});
+  const [loading, setLoading]       = useState(true);
 
+  // Load all data from Supabase on mount
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) setCsvData(JSON.parse(saved));
-    } catch {}
+    async function loadData() {
+      try {
+        const res = await fetch("/api/csv");
+        if (res.ok) {
+          const data = await res.json();
+          setCsvData(data);
+        }
+      } catch (e) {
+        console.error("Failed to load data:", e);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
   }, []);
 
-  useEffect(() => {
+  const handleCSVImport = useCallback(async (subType: string, rows: any[]) => {
+    const merge = subType === "tiktok";
     try {
-      if (Object.keys(csvData).length > 0)
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(csvData));
-    } catch {}
-  }, [csvData]);
-
-  const handleCSVImport = useCallback((subType: string, rows: any[]) => {
-    setCsvData(prev => ({ ...prev, [subType]: rows }));
+      const res = await fetch("/api/csv", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ platform: subType, rows, merge }),
+      });
+      if (res.ok) {
+        const all = await fetch("/api/csv");
+        if (all.ok) setCsvData(await all.json());
+      }
+    } catch (e) {
+      console.error("Failed to save data:", e);
+    }
   }, []);
 
-  const handleClearData = useCallback(() => {
+  const handleClearData = useCallback(async () => {
+    const platforms = ["youtube-shorts", "youtube-longform", "tiktok", "instagram", "facebook"];
+    await Promise.all(platforms.map(p => fetch(`/api/csv?platform=${p}`, { method: "DELETE" })));
     setCsvData({});
-    localStorage.removeItem(STORAGE_KEY);
   }, []);
 
   const titles: Record<string, string> = {
@@ -47,6 +64,14 @@ export default function DashboardPage() {
   };
 
   const importedTypes = Object.keys(csvData);
+
+  if (loading) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: "#080810", color: "rgba(255,255,255,0.4)", fontSize: 14 }}>
+        Loading dashboard data...
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: "#080810", color: "white", fontFamily: "system-ui, sans-serif" }}>
