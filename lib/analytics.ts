@@ -1,14 +1,15 @@
-// lib/analytics.ts — shared utilities for all platform views
+// lib/analytics.ts
 
 export function fmt(n: number | undefined | null): string {
-  if (n === undefined || n === null || isNaN(n)) return "—";
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
-  if (n >= 1_000) return (n / 1_000).toFixed(1) + "K";
-  return Math.round(n * 10) / 10 + "";
+  if (n === undefined || n === null || isNaN(Number(n))) return "—";
+  const num = Number(n);
+  if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + "M";
+  if (num >= 1_000) return (num / 1_000).toFixed(1) + "K";
+  return Math.round(num * 10) / 10 + "";
 }
 
 export function fmtPct(n: number | undefined | null, decimals = 1): string {
-  if (n === undefined || n === null || isNaN(n)) return "—";
+  if (n === undefined || n === null || isNaN(Number(n))) return "—";
   return Number(n).toFixed(decimals) + "%";
 }
 
@@ -22,7 +23,8 @@ export function fmtSec(s: number): string {
   return `${Math.round(s)}s`;
 }
 
-// Parse "04/04/2025 16:09", "Apr 25, 2024", "2024-04-25" → "2024-04"
+// Parse any date string → "YYYY-MM"
+// Handles: "04/04/2025 16:09", "Apr 25, 2024", "2024-04-25"
 export function parseYM(raw: string): string {
   if (!raw || raw.trim() === "") return "";
   const s = raw.trim();
@@ -40,52 +42,40 @@ export function parseYM(raw: string): string {
   return "";
 }
 
-// Get YYYY-MM from a video object (uses precomputed publishedYM if available)
 export function getYM(v: any): string {
   return v.publishedYM || parseYM(v.publishedAt || "");
 }
 
-// Filter videos by selected month/range
 export function filterByDate(videos: any[], dateRange: string): any[] {
   if (dateRange === "all") return videos;
   if (dateRange === "unpublished") return videos.filter(v => !getYM(v));
   return videos.filter(v => getYM(v) === dateRange);
 }
 
-// Get unique months from a list of videos, sorted descending
 export function getMonthsFromVideos(videos: any[]): { val: string; label: string }[] {
-  const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const seen = new Set<string>();
   videos.forEach(v => { const ym = getYM(v); if (ym) seen.add(ym); });
   return Array.from(seen)
     .sort((a, b) => b.localeCompare(a))
     .map(ym => {
       const [year, mo] = ym.split("-");
-      return { val: ym, label: `${monthNames[parseInt(mo) - 1]} ${year}` };
+      return { val: ym, label: `${MONTH_NAMES[parseInt(mo) - 1]} ${year}` };
     });
 }
 
-// Get month label from YYYY-MM
 export function monthLabel(ym: string): string {
-  if (!ym) return "";
-  const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  if (!ym) return "Unknown";
+  const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   const [year, mo] = ym.split("-");
-  return `${monthNames[parseInt(mo) - 1]} ${year}`;
+  return `${MONTH_NAMES[parseInt(mo) - 1]} ${year}`;
 }
 
-// Find the top video by a given metric
-export function getTopVideo(videos: any[], metric: string): any {
+export function getTopVideo(videos: any[], metric: string): any | null {
   if (!videos.length) return null;
   return [...videos].sort((a, b) => (Number(b[metric]) || 0) - (Number(a[metric]) || 0))[0];
 }
 
-// Compute % change between two values
-export function pctChange(current: number, previous: number): number {
-  if (!previous) return 0;
-  return Math.round(((current - previous) / previous) * 100);
-}
-
-// Aggregate a metric across all videos
 export function sumMetric(videos: any[], key: string): number {
   return videos.reduce((a, v) => a + (Number(v[key]) || 0), 0);
 }
@@ -95,26 +85,27 @@ export function avgMetric(videos: any[], key: string): number {
   return sumMetric(videos, key) / videos.length;
 }
 
-// Generate "why it stood out" insight text
+export function pctChange(current: number, previous: number): number | null {
+  if (!previous) return null;
+  return Math.round(((current - previous) / previous) * 100);
+}
+
 export function generateInsight(video: any, allVideos: any[], platform: string): string {
-  if (!video || !allVideos.length) return "";
+  if (!video || !allVideos.length) return "No data available.";
   const totalViews = sumMetric(allVideos, "views");
   const share = totalViews > 0 ? Math.round((Number(video.views) || 0) / totalViews * 100) : 0;
-  const insights: string[] = [];
-
-  if (share > 40) insights.push(`drove ${share}% of all views this period`);
-  if (Number(video.stayedToWatch) >= 80) insights.push(`${video.stayedToWatch}% of viewers stayed to watch`);
-  if (Number(video.retention) >= 75) insights.push(`${video.retention}% retention rate (well above average)`);
-  if (Number(video.ctr) >= 6) insights.push(`strong ${video.ctr}% click-through rate`);
-  if (Number(video.saves) > 0 && platform === "instagram") {
+  const parts: string[] = [];
+  if (share >= 30) parts.push(`drove ${share}% of all views this period`);
+  if (Number(video.stayedToWatch) >= 80) parts.push(`${video.stayedToWatch}% stayed to watch (exceptional retention)`);
+  if (Number(video.retention) >= 70) parts.push(`${video.retention}% retention rate`);
+  if (Number(video.ctr) >= 5) parts.push(`strong ${Number(video.ctr).toFixed(1)}% click-through rate`);
+  if (platform === "instagram" || platform === "tiktok") {
     const avgSaves = avgMetric(allVideos, "saves");
-    if (Number(video.saves) > avgSaves * 2) insights.push(`saves were ${Math.round(Number(video.saves) / avgSaves)}x the average`);
-  }
-  if (Number(video.shares) > 0) {
+    if (avgSaves > 0 && Number(video.saves) > avgSaves * 2) parts.push(`saves were ${Math.round(Number(video.saves) / avgSaves)}x the average`);
     const avgShares = avgMetric(allVideos, "shares");
-    if (Number(video.shares) > avgShares * 2) insights.push(`shares were ${Math.round(Number(video.shares) / avgShares)}x higher than average`);
+    if (avgShares > 0 && Number(video.shares) > avgShares * 2) parts.push(`shares were ${Math.round(Number(video.shares) / avgShares)}x the average`);
   }
-  if (platform === "youtube" && Number(video.duration) <= 60) insights.push("short duration likely triggered the Shorts loop feature");
-  if (insights.length === 0) insights.push("led all content this period by total views");
-  return "This video " + insights.join(", ") + ".";
+  if (platform === "youtube" && Number(video.duration) <= 60) parts.push("short duration likely triggered the Shorts loop");
+  if (parts.length === 0) parts.push("led this period by total views");
+  return "This post " + parts.join(" and ") + ".";
 }
