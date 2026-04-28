@@ -48,9 +48,10 @@ export function OverviewGrid({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function SectionLabel({ children }: { children: React.ReactNode }) {
+// ← Updated: now accepts an optional style prop so you can override margin etc.
+export function SectionLabel({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return (
-    <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>
+    <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12, ...style }}>
       {children}
     </p>
   );
@@ -120,7 +121,6 @@ export function VideoCard({ id, thumb, title, publishedAt, badge, quickStats, ch
           {thumb}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          {/* Title now wraps fully — no truncation */}
           <p style={{ color: "white", fontSize: 13, fontWeight: 500, margin: 0, lineHeight: 1.4 }}>{title}</p>
           <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, margin: "4px 0 0" }}>
             {publishedAt}
