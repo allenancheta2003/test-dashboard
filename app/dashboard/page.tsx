@@ -111,10 +111,12 @@ export default function DashboardPage() {
         <div style={{ padding: 32 }}>
           {platform === "youtube" && (
             <YouTubeView
-              dateRange={dateRange}
-              shortsCsvData={csvData["youtube-shorts"]}
-              longCsvData={csvData["youtube-longform"]}
-            />
+  dateRange={dateRange}
+  shortsCsvData={csvData["youtube-shorts"]}
+  longCsvData={csvData["youtube-longform"]}
+  glendoraShortsData={csvData["glendora-shorts"]}
+  glendoraLongData={csvData["glendora-longform"]}
+/>
           )}
           {platform === "tiktok"    && <TikTokView    dateRange={dateRange} csvData={csvData["tiktok"]} />}
           {platform === "instagram" && <InstagramView dateRange={dateRange} csvData={csvData["instagram"]} />}
