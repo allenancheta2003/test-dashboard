@@ -3,12 +3,20 @@ import { useState, useMemo } from "react";
 import { ytShorts, ytLongform } from "@/lib/data";
 import {
   MetricCard, OverviewGrid, SectionLabel, VideoCard,
-  LikeDislikeBar, DiscoveryBars, InlineMetrics, FormatToggle,
+  LikeDislikeBar, InlineMetrics, FormatToggle,
   fmt, fmtSec
 } from "@/components/ui";
 import AnalyticsChart from "@/components/AnalyticsChart";
 
-const COLOR = "#FF4444";
+const COLORS: Record<string, string> = {
+  ibrahim: "#FF4444",
+  glendora: "#FF8C00",
+};
+
+const ACCOUNTS = [
+  { id: "ibrahim",  label: "Team Ibrahim YT",  color: "#FF4444" },
+  { id: "glendora", label: "Glendora YT",       color: "#FF8C00" },
+];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -43,32 +51,152 @@ function parseAvgDur(val: string | number): number {
 }
 
 function monthLabel(ym: string): string {
-  if (!ym) return "";
+  if (!ym) return "Unknown";
   const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const [year, mo] = ym.split("-");
   return `${MONTHS[parseInt(mo) - 1]} ${year}`;
 }
 
-// ─── Account selector ─────────────────────────────────────────────────────────
+function getMonths(videos: any[]) {
+  const seen = new Set<string>();
+  videos.forEach(v => { const ym = parseYM(v.publishedAt || ""); if (ym) seen.add(ym); });
+  return Array.from(seen).sort((a, b) => b.localeCompare(a));
+}
 
-const ACCOUNTS = [
-  { id: "ibrahim", label: "Team Ibrahim YT", color: "#FF4444" },
-  { id: "glendora", label: "Glendora YT",    color: "#FF8C00" },
-];
+function sumMetric(videos: any[], key: string) {
+  return videos.reduce((a, v) => a + (Number(v[key]) || 0), 0);
+}
 
-// ─── Chart section (used by both Shorts and Longform) ─────────────────────────
+// ─── Shared tab bar ───────────────────────────────────────────────────────────
 
-const SHORTS_CHART_METRICS = [
+function TabBar({ tabs, active, onChange }: { tabs: { id: string; label: string }[]; active: string; onChange: (id: string) => void }) {
+  return (
+    <div style={{ display: "flex", gap: 4, marginBottom: 20, borderBottom: "1px solid rgba(255,255,255,0.07)", paddingBottom: 12 }}>
+      {tabs.map(t => (
+        <button key={t.id} onClick={() => onChange(t.id)}
+          style={{ padding: "6px 14px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13,
+            background: active === t.id ? "rgba(255,255,255,0.1)" : "transparent",
+            color: active === t.id ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.4)",
+            fontWeight: active === t.id ? 600 : 400 }}>
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─── Metric pill selector ─────────────────────────────────────────────────────
+
+function MetricPills({ metrics, active, onChange, color }: {
+  metrics: { key: string; label: string }[]; active: string; onChange: (k: string) => void; color: string;
+}) {
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 12 }}>
+      {metrics.map(m => (
+        <button key={m.key} onClick={() => onChange(m.key)}
+          style={{ padding: "4px 12px", borderRadius: 99,
+            border: `1px solid ${m.key === active ? color + "44" : "rgba(255,255,255,0.1)"}`,
+            background: m.key === active ? color + "18" : "transparent",
+            color: m.key === active ? color : "rgba(255,255,255,0.45)",
+            fontSize: 11, cursor: "pointer", fontWeight: m.key === active ? 600 : 400 }}>
+          {m.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─── Video table (visible metrics, no expand needed) ──────────────────────────
+
+function VideoTable({ videos, format, color, sortKey, onSort }: {
+  videos: any[]; format: "shorts" | "longform"; color: string; sortKey: string; onSort: (k: string) => void;
+}) {
+  const cols = format === "shorts"
+    ? ["views","likes","comments","stayedToWatch","ctr","subscribers"]
+    : ["views","likes","comments","ctr","avgPctViewed","subscribers"];
+
+  const colLabels: Record<string, string> = {
+    views:"Views", likes:"Likes", comments:"Comments", stayedToWatch:"Stayed %",
+    ctr:"CTR %", subscribers:"Subs", avgPctViewed:"Avg viewed", impressions:"Impressions",
+  };
+
+  const maxVal = Math.max(...videos.map(v => Number(v[sortKey]) || 0), 1);
+  const gridCols = `24px 1fr ${cols.map(() => "68px").join(" ")}`;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+      {/* Header */}
+      <div style={{ display: "grid", gridTemplateColumns: gridCols, gap: 8,
+        padding: "6px 12px", fontSize: 10, color: "rgba(255,255,255,0.3)",
+        textTransform: "uppercase", letterSpacing: "0.06em" }}>
+        <div>#</div>
+        <div>Title</div>
+        {cols.map(k => (
+          <button key={k} onClick={() => onSort(k)}
+            style={{ textAlign: "right", background: "none", border: "none", cursor: "pointer", padding: 0,
+              color: k === sortKey ? color : "rgba(255,255,255,0.3)",
+              fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em",
+              fontWeight: k === sortKey ? 700 : 400 }}>
+            {colLabels[k]}{k === sortKey ? " ↓" : ""}
+          </button>
+        ))}
+      </div>
+
+      {/* Rows */}
+      {videos.map((v, i) => {
+        const barW = Math.round((Number(v[sortKey]) || 0) / maxVal * 100);
+        const ytId = v.videoId || "";
+        const link = ytId ? `https://youtube.com/${format === "shorts" ? "shorts/" : "watch?v="}${ytId}` : null;
+        return (
+          <div key={v.id || i} style={{ display: "grid", gridTemplateColumns: gridCols, gap: 8,
+            alignItems: "center", padding: "10px 12px",
+            background: "rgba(255,255,255,0.03)", border: "0.5px solid rgba(255,255,255,0.07)", borderRadius: 10 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color, textAlign: "center" }}>{i + 1}</div>
+            <div>
+              {link
+                ? <a href={link} target="_blank" rel="noopener noreferrer"
+                    style={{ fontSize: 12, fontWeight: 500, color: "white", textDecoration: "none",
+                      display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                    title={v.title}>{v.title || "Untitled"}</a>
+                : <div style={{ fontSize: 12, fontWeight: 500, color: "white",
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.title || "Untitled"}</div>
+              }
+              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", marginTop: 1 }}>{v.publishedAt || "Unpublished"}</div>
+              <div style={{ height: 3, background: "rgba(255,255,255,0.08)", borderRadius: 99, marginTop: 3, overflow: "hidden" }}>
+                <div style={{ width: `${barW}%`, height: "100%", background: color + "88", borderRadius: 99 }} />
+              </div>
+            </div>
+            {cols.map(k => {
+              const val = Number(v[k]) || 0;
+              let display = fmt(val);
+              if (k === "ctr") display = val ? `${val.toFixed(2)}%` : "—";
+              else if (k === "stayedToWatch" || k === "avgPctViewed") display = val ? `${val}%` : "—";
+              return (
+                <div key={k} style={{ fontSize: 12, fontWeight: 500, color: "rgba(255,255,255,0.85)", textAlign: "right" }}>
+                  {display}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Chart section ────────────────────────────────────────────────────────────
+
+const SHORTS_METRICS  = [
   { key: "views",         label: "Views" },
   { key: "likes",         label: "Likes" },
   { key: "comments",      label: "Comments" },
   { key: "stayedToWatch", label: "Stayed %" },
+  { key: "ctr",           label: "CTR %" },
   { key: "subscribers",   label: "Subscribers" },
   { key: "impressions",   label: "Impressions" },
-  { key: "ctr",           label: "CTR %" },
 ];
 
-const LONGFORM_CHART_METRICS = [
+const LONGFORM_METRICS = [
   { key: "views",         label: "Views" },
   { key: "likes",         label: "Likes" },
   { key: "comments",      label: "Comments" },
@@ -79,118 +207,379 @@ const LONGFORM_CHART_METRICS = [
   { key: "watchTimeHours",label: "Watch hrs" },
 ];
 
-function ChartSection({ videos, chartMetrics }: { videos: any[]; chartMetrics: { key: string; label: string }[] }) {
+function ChartSection({ allVideos, format, color }: {
+  allVideos: any[]; format: "shorts" | "longform"; color: string;
+}) {
+  const chartMetricsList = format === "shorts" ? SHORTS_METRICS : LONGFORM_METRICS;
   const [chartMetric, setChartMetric] = useState("views");
-  const [chartType, setChartType]     = useState<"bar" | "line">("bar");
-  // Filter by specific video titles
-  const [selectedVideos, setSelectedVideos] = useState<string[]>([]);
+  const [chartType,   setChartType]   = useState<"bar" | "line">("bar");
+  const [selMonths,   setSelMonths]   = useState<string[]>([]);
+  const [selVideos,   setSelVideos]   = useState<string[]>([]);
 
-  // Get all unique video titles for the filter
+  const allMonths = useMemo(() => getMonths(allVideos), [allVideos]);
+
+  // When months are selected, show videos in those months
+  const videosInMonths = useMemo(() => {
+    if (!selMonths.length) return allVideos;
+    return allVideos.filter(v => selMonths.includes(parseYM(v.publishedAt || "")));
+  }, [allVideos, selMonths]);
+
   const allTitles = useMemo(() =>
-    Array.from(new Set(videos.map(v => v.title || "Untitled"))).slice(0, 20),
-    [videos]
+    Array.from(new Set(videosInMonths.map(v => v.title || "Untitled"))).slice(0, 30),
+    [videosInMonths]
   );
 
-  // Build chart data — by month, optionally filtered to selected videos
-  const filteredForChart = selectedVideos.length > 0
-    ? videos.filter(v => selectedVideos.includes(v.title || "Untitled"))
-    : videos;
+  // Final filtered set for chart
+  const chartVideos = useMemo(() => {
+    let vids = selMonths.length ? videosInMonths : allVideos;
+    if (selVideos.length) vids = vids.filter(v => selVideos.includes(v.title || "Untitled"));
+    return vids;
+  }, [videosInMonths, selVideos, selMonths, allVideos]);
 
+  // Build chart data by month
   const chartData = useMemo(() => {
     const byMonth: Record<string, number[]> = {};
-    filteredForChart.forEach(v => {
+    chartVideos.forEach(v => {
       const ym = parseYM(v.publishedAt || "");
       if (!ym) return;
       if (!byMonth[ym]) byMonth[ym] = [];
       byMonth[ym].push(Number(v[chartMetric]) || 0);
     });
-    const sortedMonths = Object.keys(byMonth).sort();
+    const sortedMs = Object.keys(byMonth).sort();
     return {
-      labels: sortedMonths.map(monthLabel),
-      values: sortedMonths.map(ym => byMonth[ym].reduce((a, b) => a + b, 0)),
+      labels: sortedMs.map(monthLabel),
+      values: sortedMs.map(ym => byMonth[ym].reduce((a, b) => a + b, 0)),
     };
-  }, [filteredForChart, chartMetric]);
+  }, [chartVideos, chartMetric]);
 
-  const toggleVideo = (title: string) => {
-    setSelectedVideos(prev =>
-      prev.includes(title) ? prev.filter(t => t !== title) : [...prev, title]
-    );
+  const toggleMonth = (ym: string) => {
+    setSelMonths(prev => prev.includes(ym) ? prev.filter(m => m !== ym) : [...prev, ym]);
+    setSelVideos([]); // reset video filter when months change
   };
+
+  const toggleVideo = (title: string) =>
+    setSelVideos(prev => prev.includes(title) ? prev.filter(t => t !== title) : [...prev, title]);
 
   return (
     <div>
-      {/* Metric selector */}
+      {/* Metric */}
       <SectionLabel>Metric</SectionLabel>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 14 }}>
-        {chartMetrics.map(m => (
-          <button key={m.key} onClick={() => setChartMetric(m.key)}
-            style={{ padding: "4px 12px", borderRadius: 99,
-              border: `1px solid ${chartMetric === m.key ? COLOR + "44" : "rgba(255,255,255,0.1)"}`,
-              background: chartMetric === m.key ? COLOR + "18" : "transparent",
-              color: chartMetric === m.key ? COLOR : "rgba(255,255,255,0.45)",
-              fontSize: 11, cursor: "pointer", fontWeight: chartMetric === m.key ? 600 : 400 }}>
-            {m.label}
-          </button>
-        ))}
-      </div>
+      <MetricPills metrics={chartMetricsList} active={chartMetric} onChange={setChartMetric} color={color} />
 
       {/* Chart type */}
-      <div style={{ display: "flex", gap: 4, marginBottom: 14 }}>
+      <div style={{ display: "flex", gap: 4, marginBottom: 16 }}>
         {["bar", "line"].map(t => (
           <button key={t} onClick={() => setChartType(t as "bar" | "line")}
             style={{ padding: "4px 12px", borderRadius: 99,
               border: `1px solid ${chartType === t ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.1)"}`,
               background: chartType === t ? "rgba(255,255,255,0.1)" : "transparent",
-              color: chartType === t ? "white" : "rgba(255,255,255,0.4)",
-              fontSize: 11, cursor: "pointer" }}>
+              color: chartType === t ? "white" : "rgba(255,255,255,0.4)", fontSize: 11, cursor: "pointer" }}>
             {t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
         ))}
       </div>
 
-      {/* Video filter */}
-      {allTitles.length > 1 && (
-        <>
-          <SectionLabel>Filter by video {selectedVideos.length > 0 && `(${selectedVideos.length} selected)`}</SectionLabel>
-          <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 14,
-            maxHeight: 180, overflowY: "auto", padding: "4px 0" }}>
-            <button onClick={() => setSelectedVideos([])}
-              style={{ textAlign: "left", padding: "5px 10px", borderRadius: 8, border: "none", cursor: "pointer",
-                background: selectedVideos.length === 0 ? COLOR + "18" : "transparent",
-                color: selectedVideos.length === 0 ? COLOR : "rgba(255,255,255,0.5)",
-                fontSize: 12, fontWeight: selectedVideos.length === 0 ? 600 : 400 }}>
-              All videos
-            </button>
-            {allTitles.map(title => {
-              const on = selectedVideos.includes(title);
-              return (
-                <button key={title} onClick={() => toggleVideo(title)}
-                  style={{ textAlign: "left", padding: "5px 10px", borderRadius: 8, border: "none", cursor: "pointer",
-                    background: on ? COLOR + "18" : "transparent",
-                    color: on ? COLOR : "rgba(255,255,255,0.5)",
-                    fontSize: 12, fontWeight: on ? 600 : 400,
-                    display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ width: 14, height: 14, borderRadius: 4, border: `1px solid ${on ? COLOR : "rgba(255,255,255,0.2)"}`,
-                    background: on ? COLOR : "transparent", display: "inline-flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 10, color: "white", flexShrink: 0 }}>
-                    {on ? "✓" : ""}
-                  </span>
-                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
-                </button>
-              );
-            })}
+      <div style={{ display: "grid", gridTemplateColumns: "180px 1fr", gap: 16 }}>
+        {/* Left: filters */}
+        <div>
+          {/* Month filter */}
+          <div style={{ marginBottom: 12 }}>
+            <p style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>
+              Filter by month {selMonths.length > 0 && `(${selMonths.length})`}
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 3, maxHeight: 200, overflowY: "auto" }}>
+              <button onClick={() => { setSelMonths([]); setSelVideos([]); }}
+                style={{ textAlign: "left", padding: "5px 8px", borderRadius: 6, border: "none", cursor: "pointer",
+                  background: selMonths.length === 0 ? color + "18" : "transparent",
+                  color: selMonths.length === 0 ? color : "rgba(255,255,255,0.5)", fontSize: 12, fontWeight: selMonths.length === 0 ? 600 : 400 }}>
+                All months
+              </button>
+              {allMonths.map(ym => {
+                const on = selMonths.includes(ym);
+                return (
+                  <button key={ym} onClick={() => toggleMonth(ym)}
+                    style={{ textAlign: "left", padding: "5px 8px", borderRadius: 6, border: "none", cursor: "pointer",
+                      background: on ? color + "18" : "transparent",
+                      color: on ? color : "rgba(255,255,255,0.5)", fontSize: 12, fontWeight: on ? 600 : 400,
+                      display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ width: 12, height: 12, borderRadius: 3,
+                      border: `1px solid ${on ? color : "rgba(255,255,255,0.2)"}`,
+                      background: on ? color : "transparent", display: "inline-flex",
+                      alignItems: "center", justifyContent: "center", fontSize: 9, color: "white", flexShrink: 0 }}>
+                      {on ? "✓" : ""}
+                    </span>
+                    {monthLabel(ym)}
+                  </button>
+                );
+              })}
+            </div>
           </div>
+
+          {/* Video filter — shows once months are selected */}
+          {allTitles.length > 0 && (
+            <div>
+              <p style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>
+                Filter by video {selVideos.length > 0 && `(${selVideos.length})`}
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 3, maxHeight: 240, overflowY: "auto" }}>
+                <button onClick={() => setSelVideos([])}
+                  style={{ textAlign: "left", padding: "5px 8px", borderRadius: 6, border: "none", cursor: "pointer",
+                    background: selVideos.length === 0 ? color + "18" : "transparent",
+                    color: selVideos.length === 0 ? color : "rgba(255,255,255,0.5)", fontSize: 11, fontWeight: selVideos.length === 0 ? 600 : 400 }}>
+                  All videos
+                </button>
+                {allTitles.map(title => {
+                  const on = selVideos.includes(title);
+                  return (
+                    <button key={title} onClick={() => toggleVideo(title)}
+                      style={{ textAlign: "left", padding: "5px 8px", borderRadius: 6, border: "none", cursor: "pointer",
+                        background: on ? color + "18" : "transparent",
+                        color: on ? color : "rgba(255,255,255,0.5)", fontSize: 11, fontWeight: on ? 600 : 400,
+                        display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ width: 12, height: 12, borderRadius: 3,
+                        border: `1px solid ${on ? color : "rgba(255,255,255,0.2)"}`,
+                        background: on ? color : "transparent", display: "inline-flex",
+                        alignItems: "center", justifyContent: "center", fontSize: 9, color: "white", flexShrink: 0 }}>
+                        {on ? "✓" : ""}
+                      </span>
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 140 }}>{title}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Right: chart */}
+        <div>
+          {chartData.labels.length === 0
+            ? <div style={{ textAlign: "center", padding: 60, color: "rgba(255,255,255,0.3)", fontSize: 13 }}>
+                No data for selected filters.
+              </div>
+            : chartData.labels.length === 1
+              ? <div style={{ textAlign: "center", padding: 60, color: "rgba(255,255,255,0.3)", fontSize: 13 }}>
+                  Only one month of data — select more months or import more CSVs to see a trend.
+                </div>
+              : <AnalyticsChart type={chartType} labels={chartData.labels}
+                  datasets={[{ label: chartMetricsList.find(m => m.key === chartMetric)?.label || chartMetric, data: chartData.values, color }]} />
+          }
+          {/* Show which videos are contributing */}
+          {chartVideos.length > 0 && (
+            <p style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 8, textAlign: "center" }}>
+              {chartVideos.length} video{chartVideos.length !== 1 ? "s" : ""} · {selVideos.length > 0 ? selVideos.length + " selected" : "all"} · showing {chartMetricsList.find(m => m.key === chartMetric)?.label} by month
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Compare section ──────────────────────────────────────────────────────────
+
+function CompareSection({ allVideos, format, color }: {
+  allVideos: any[]; format: "shorts" | "longform"; color: string;
+}) {
+  const metricsList = format === "shorts" ? SHORTS_METRICS : LONGFORM_METRICS;
+  const [cmpMode,   setCmpMode]   = useState("month");
+  const [cmpMetric, setCmpMetric] = useState("views");
+  const [m1, setM1] = useState("");
+  const [m2, setM2] = useState("");
+  const [v1, setV1] = useState(0);
+  const [v2, setV2] = useState(1);
+  const [d1, setD1] = useState(""); const [d2, setD2] = useState("");
+  const [d3, setD3] = useState(""); const [d4, setD4] = useState("");
+
+  const months = useMemo(() => getMonths(allVideos), [allVideos]);
+  const mon1 = m1 || months[0] || "";
+  const mon2 = m2 || months[1] || "";
+
+  const getMonthVids = (ym: string) => allVideos.filter(v => parseYM(v.publishedAt || "") === ym);
+  const m1Vids = getMonthVids(mon1); const m2Vids = getMonthVids(mon2);
+  const m1Val = sumMetric(m1Vids, cmpMetric); const m2Val = sumMetric(m2Vids, cmpMetric);
+  const delta = m1Val - m2Val; const deltaPct = m2Val > 0 ? Math.round(delta / m2Val * 100) : 0;
+
+  const allFilteredVids = filterByMonth(allVideos, "all");
+  const vid1 = allFilteredVids[v1];
+  const vid2 = allFilteredVids[v2];
+
+  return (
+    <div>
+      {/* Mode */}
+      <div style={{ display: "flex", gap: 4, marginBottom: 16 }}>
+        {[
+          { id: "month",  label: "Month vs month" },
+          { id: "video",  label: "Video vs video" },
+          { id: "custom", label: "Custom range" },
+        ].map(m => (
+          <button key={m.id} onClick={() => setCmpMode(m.id)}
+            style={{ padding: "6px 14px", borderRadius: 8,
+              border: `1px solid ${cmpMode === m.id ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.1)"}`,
+              background: cmpMode === m.id ? "rgba(255,255,255,0.1)" : "transparent",
+              color: cmpMode === m.id ? "white" : "rgba(255,255,255,0.4)",
+              fontSize: 12, cursor: "pointer", fontWeight: cmpMode === m.id ? 600 : 400 }}>
+            {m.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Month vs month */}
+      {cmpMode === "month" && (
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+            {[{ val: mon1, set: setM1 }, { val: mon2, set: setM2 }].map(({ val, set }, idx) => (
+              <select key={idx} value={val} onChange={e => set(e.target.value)}
+                style={{ padding: "7px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)", background: "#1a1a2e", color: "white", fontSize: 13, cursor: "pointer" }}>
+                {months.map(ym => <option key={ym} value={ym}>{monthLabel(ym)}</option>)}
+              </select>
+            ))}
+            {months.length < 2 && <span style={{ fontSize: 12, color: "rgba(255,255,255,0.3)" }}>Import data from multiple months to compare</span>}
+          </div>
+
+          <SectionLabel>Metric to compare</SectionLabel>
+          <MetricPills metrics={metricsList} active={cmpMetric} onChange={setCmpMetric} color={color} />
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
+            {[{ ym: mon1, val: m1Val, vids: m1Vids, isA: true }, { ym: mon2, val: m2Val, vids: m2Vids, isA: false }].map(({ ym, val, vids, isA }) => (
+              <div key={ym} style={{ background: isA ? color + "12" : "rgba(255,255,255,0.04)",
+                border: `1px solid ${isA ? color + "33" : "rgba(255,255,255,0.08)"}`, borderRadius: 12, padding: 16 }}>
+                <div style={{ fontSize: 11, color: isA ? color : "rgba(255,255,255,0.4)", marginBottom: 6 }}>
+                  {monthLabel(ym)}{isA ? " — A" : " — B"}
+                </div>
+                <div style={{ fontSize: 26, fontWeight: 700, color: isA ? color : "white", marginBottom: 4 }}>
+                  {metricsList.find(m => m.key === cmpMetric)?.label.includes("%") ? `${val.toFixed(1)}%` : fmt(val)}
+                </div>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)" }}>
+                  {metricsList.find(m => m.key === cmpMetric)?.label} · {vids.length} videos
+                </div>
+                {/* Show all metrics for the month */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 12 }}>
+                  {metricsList.map(m => (
+                    <div key={m.key} style={{ background: "rgba(255,255,255,0.04)", borderRadius: 6, padding: "6px 8px" }}>
+                      <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", marginBottom: 2 }}>{m.label}</div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: m.key === cmpMetric ? (isA ? color : "white") : "rgba(255,255,255,0.7)" }}>
+                        {fmt(sumMetric(vids, m.key))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ textAlign: "center", padding: "10px 16px", background: "rgba(255,255,255,0.04)", borderRadius: 8,
+            fontSize: 13, color: delta >= 0 ? "#22c55e" : "#ef4444", marginBottom: 16 }}>
+            {delta >= 0 ? "▲" : "▼"} {fmt(Math.abs(delta))} ({deltaPct >= 0 ? "+" : ""}{deltaPct}%) — {monthLabel(mon1)} vs {monthLabel(mon2)}
+          </div>
+
+          <AnalyticsChart type="bar" labels={metricsList.map(m => m.label)}
+            datasets={[
+              { label: monthLabel(mon1), data: metricsList.map(m => sumMetric(m1Vids, m.key)), color },
+              { label: monthLabel(mon2), data: metricsList.map(m => sumMetric(m2Vids, m.key)), color: "#888888" },
+            ]} />
         </>
       )}
 
-      {/* Chart */}
-      {chartData.labels.length < 2
-        ? <div style={{ textAlign: "center", padding: 60, color: "rgba(255,255,255,0.3)", fontSize: 14 }}>
-            Import data across multiple months to see a trend chart.
+      {/* Video vs video */}
+      {cmpMode === "video" && (
+        allFilteredVids.length < 2
+          ? <div style={{ textAlign: "center", padding: 60, color: "rgba(255,255,255,0.3)", fontSize: 14 }}>Need at least 2 videos. Try selecting "All time".</div>
+          : <>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+              {[v1, v2].map((vi, idx) => (
+                <select key={idx} value={vi} onChange={e => idx === 0 ? setV1(Number(e.target.value)) : setV2(Number(e.target.value))}
+                  style={{ padding: "7px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)", background: "#1a1a2e", color: "white", fontSize: 12, cursor: "pointer", maxWidth: 260 }}>
+                  {allFilteredVids.map((v, i) => <option key={i} value={i}>{(v.title || "Untitled").slice(0, 55)}</option>)}
+                </select>
+              ))}
+            </div>
+            {[vid1, vid2].filter(Boolean).map((v, idx) => (
+              <div key={idx} style={{ background: idx === 0 ? color + "10" : "rgba(255,255,255,0.04)",
+                border: `1px solid ${idx === 0 ? color + "33" : "rgba(255,255,255,0.08)"}`, borderRadius: 12, padding: 14, marginBottom: 10 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "white", marginBottom: 8 }}>{v?.title || "Untitled"}</div>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 10 }}>{v?.publishedAt || "—"}</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(110px,1fr))", gap: 6 }}>
+                  {metricsList.map(m => {
+                    const val = Number(v?.[m.key] || 0);
+                    const display = m.label.includes("%") ? `${val.toFixed(1)}%` : fmt(val);
+                    return (
+                      <div key={m.key} style={{ background: "rgba(255,255,255,0.05)", borderRadius: 8, padding: "8px 10px" }}>
+                        <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginBottom: 2 }}>{m.label}</div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: idx === 0 ? color : "white" }}>{display}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+            <AnalyticsChart type="bar" labels={metricsList.map(m => m.label)}
+              datasets={[
+                { label: (vid1?.title || "Video A").slice(0, 25), data: metricsList.map(m => Number(vid1?.[m.key]) || 0), color },
+                { label: (vid2?.title || "Video B").slice(0, 25), data: metricsList.map(m => Number(vid2?.[m.key]) || 0), color: "#888888" },
+              ]} />
+          </>
+      )}
+
+      {/* Custom range */}
+      {cmpMode === "custom" && (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 12, alignItems: "flex-start", marginBottom: 16 }}>
+            {[
+              { label: "Range A", d1, setD1, d2, setD2 },
+              null,
+              { label: "Range B", d1: d3, setD1: setD3, d2: d4, setD2: setD4 },
+            ].map((item, idx) => item === null
+              ? <span key="vs" style={{ color: "rgba(255,255,255,0.4)", fontSize: 14, textAlign: "center", paddingTop: 22 }}>vs</span>
+              : (
+                <div key={idx}>
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 6 }}>{item.label}</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <input type="date" value={item.d1} onChange={e => item.setD1(e.target.value)}
+                      style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)", background: "#1a1a2e", color: "white", fontSize: 12 }} />
+                    <input type="date" value={item.d2} onChange={e => item.setD2(e.target.value)}
+                      style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)", background: "#1a1a2e", color: "white", fontSize: 12 }} />
+                  </div>
+                </div>
+              )
+            )}
           </div>
-        : <AnalyticsChart type={chartType} labels={chartData.labels}
-            datasets={[{ label: chartMetrics.find(m => m.key === chartMetric)?.label || chartMetric, data: chartData.values, color: COLOR }]} />
-      }
+          {d1 && d2 && d3 && d4 && (() => {
+            const ra = allVideos.filter(v => { const dt = new Date(v.publishedAt || ""); return dt >= new Date(d1) && dt <= new Date(d2); });
+            const rb = allVideos.filter(v => { const dt = new Date(v.publishedAt || ""); return dt >= new Date(d3) && dt <= new Date(d4); });
+            const aV = sumMetric(ra, "views"); const bV = sumMetric(rb, "views"); const dd = aV - bV;
+            return (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
+                  {[{ label: `${d1} → ${d2}`, val: aV, vids: ra, isA: true }, { label: `${d3} → ${d4}`, val: bV, vids: rb, isA: false }].map(({ label, val, vids, isA }) => (
+                    <div key={label} style={{ background: isA ? color + "12" : "rgba(255,255,255,0.04)",
+                      border: `1px solid ${isA ? color + "33" : "rgba(255,255,255,0.08)"}`, borderRadius: 12, padding: 14 }}>
+                      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 6 }}>{label}</div>
+                      <div style={{ fontSize: 22, fontWeight: 700, color: isA ? color : "white" }}>{fmt(val)}</div>
+                      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginTop: 2 }}>views · {vids.length} videos</div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5, marginTop: 10 }}>
+                        {metricsList.slice(0, 6).map(m => (
+                          <div key={m.key} style={{ background: "rgba(255,255,255,0.04)", borderRadius: 6, padding: "5px 8px" }}>
+                            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)" }}>{m.label}</div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.8)" }}>{fmt(sumMetric(vids, m.key))}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ textAlign: "center", padding: "8px 16px", background: "rgba(255,255,255,0.04)", borderRadius: 8,
+                  fontSize: 13, color: dd >= 0 ? "#22c55e" : "#ef4444" }}>
+                  Range A {dd >= 0 ? "▲" : "▼"} {fmt(Math.abs(dd))} ({bV > 0 ? Math.round(dd / bV * 100) : 0}%) vs Range B
+                </div>
+              </>
+            );
+          })()}
+          {(!d1 || !d2 || !d3 || !d4) && (
+            <div style={{ textAlign: "center", padding: 40, color: "rgba(255,255,255,0.3)", fontSize: 13 }}>Select both date ranges above to compare.</div>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -201,9 +590,16 @@ const TABS = [
   { id: "overview", label: "Overview" },
   { id: "videos",   label: "All videos" },
   { id: "chart",    label: "Chart" },
+  { id: "compare",  label: "Compare" },
 ];
 
-export default function YouTubeView({ dateRange, shortsCsvData, longCsvData, glendoraShortsData, glendoraLongData }: {
+export default function YouTubeView({
+  dateRange,
+  // Team Ibrahim
+  shortsCsvData, longCsvData,
+  // Glendora
+  glendoraShortsData, glendoraLongData,
+}: {
   dateRange: string;
   shortsCsvData?: any[];
   longCsvData?: any[];
@@ -211,15 +607,17 @@ export default function YouTubeView({ dateRange, shortsCsvData, longCsvData, gle
   glendoraLongData?: any[];
 }) {
   const [account, setAccount] = useState("ibrahim");
-  const [format, setFormat]   = useState<"shorts" | "longform">("shorts");
-  const [tab, setTab]         = useState("overview");
+  const [format,  setFormat]  = useState<"shorts" | "longform">("shorts");
+  const [tab,     setTab]     = useState("overview");
   const [sortKey, setSortKey] = useState("views");
 
-  // Pick data based on selected account
   const isGlendora = account === "glendora";
+  const color = COLORS[account];
+
   const shortsSource = isGlendora
     ? (glendoraShortsData?.length ? glendoraShortsData : [])
     : (shortsCsvData?.length ? shortsCsvData : ytShorts);
+
   const longSource = isGlendora
     ? (glendoraLongData?.length ? glendoraLongData : [])
     : (longCsvData?.length ? longCsvData : ytLongform);
@@ -228,15 +626,27 @@ export default function YouTubeView({ dateRange, shortsCsvData, longCsvData, gle
   const longVideos   = filterByMonth(longSource,   dateRange);
   const videos       = format === "shorts" ? shortsVideos : longVideos;
   const allVideos    = format === "shorts" ? shortsSource : longSource;
-  const sorted       = [...videos].sort((a, b) => (Number(b[sortKey]) || 0) - (Number(a[sortKey]) || 0));
-  const chartMetrics = format === "shorts" ? SHORTS_CHART_METRICS : LONGFORM_CHART_METRICS;
+  const sorted       = useMemo(() =>
+    [...videos].sort((a, b) => (Number(b[sortKey]) || 0) - (Number(a[sortKey]) || 0)),
+    [videos, sortKey]
+  );
+
+  // Overview metrics
+  const totViews    = videos.reduce((a, v) => a + (Number(v.views) || 0), 0);
+  const totLikes    = videos.reduce((a, v) => a + (Number(v.likes) || 0), 0);
+  const totComments = videos.reduce((a, v) => a + (Number(v.comments) || 0), 0);
+  const totSubs     = videos.reduce((a, v) => a + (Number(v.subscribers) || 0), 0);
+  const totImpr     = videos.reduce((a, v) => a + (Number(v.impressions) || 0), 0);
+  const avgCTR      = videos.length ? (videos.reduce((a, v) => a + (Number(v.ctr) || 0), 0) / videos.length).toFixed(2) : "0";
+  const avgStayed   = videos.length ? (videos.reduce((a, v) => a + (Number(v.stayedToWatch) || 0), 0) / videos.length).toFixed(1) : "0";
+  const avgPct      = videos.length ? (videos.reduce((a, v) => a + (Number(v.avgPctViewed) || 0), 0) / videos.length).toFixed(1) : "0";
 
   return (
     <div>
       {/* Account selector */}
       <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
         {ACCOUNTS.map(acc => (
-          <button key={acc.id} onClick={() => setAccount(acc.id)}
+          <button key={acc.id} onClick={() => { setAccount(acc.id); setTab("overview"); }}
             style={{ padding: "6px 16px", borderRadius: 8,
               border: `1px solid ${account === acc.id ? acc.color + "44" : "rgba(255,255,255,0.1)"}`,
               background: account === acc.id ? acc.color + "18" : "transparent",
@@ -250,305 +660,103 @@ export default function YouTubeView({ dateRange, shortsCsvData, longCsvData, gle
       {/* Format toggle */}
       <FormatToggle
         value={format}
-        onChange={v => { setFormat(v as "shorts" | "longform"); setTab("overview"); }}
+        onChange={v => { setFormat(v as "shorts" | "longform"); setTab("overview"); setSortKey("views"); }}
         options={[
           { id: "shorts",   label: `Shorts (${shortsVideos.length})` },
           { id: "longform", label: `Long-form (${longVideos.length})` },
         ]}
       />
 
-      {/* Tab bar */}
-      <div style={{ display: "flex", gap: 4, marginBottom: 20, borderBottom: "1px solid rgba(255,255,255,0.07)", paddingBottom: 12 }}>
-        {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            style={{ padding: "6px 14px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13,
-              background: tab === t.id ? "rgba(255,255,255,0.1)" : "transparent",
-              color: tab === t.id ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.4)",
-              fontWeight: tab === t.id ? 600 : 400 }}>
-            {t.label}
-          </button>
-        ))}
-      </div>
+      {/* Tabs */}
+      <TabBar tabs={TABS} active={tab} onChange={setTab} />
 
       {/* ── OVERVIEW ── */}
       {tab === "overview" && (
-        format === "shorts"
-          ? <ShortsSection videos={shortsVideos} />
-          : <LongformSection videos={longVideos} />
+        !videos.length
+          ? <div style={{ textAlign: "center", padding: 60, color: "rgba(255,255,255,0.3)", fontSize: 14 }}>
+              No data for this period. Import a CSV or select a different month.
+              {isGlendora && <div style={{ marginTop: 8, fontSize: 12 }}>Import a <code>glendora-shorts.csv</code> or <code>glendora-longform.csv</code> file.</div>}
+            </div>
+          : <>
+            <SectionLabel>{videos.length} videos · {dateRange === "all" ? "all time" : monthLabel(dateRange)}</SectionLabel>
+            <OverviewGrid>
+              <MetricCard label="Total views"          value={fmt(totViews)}        accent={color} />
+              <MetricCard label="Total likes"          value={fmt(totLikes)}        accent={color} />
+              <MetricCard label="Total comments"       value={fmt(totComments)}     accent={color} />
+              <MetricCard label="Subscribers gained"   value={`+${fmt(totSubs)}`}   accent={color} />
+              <MetricCard label="Avg. CTR"             value={`${avgCTR}%`}          accent={color} bar={parseFloat(avgCTR) * 10} />
+              {format === "shorts" && <MetricCard label="Avg. stayed to watch" value={`${avgStayed}%`} accent={color} bar={parseFloat(avgStayed)} />}
+              {format === "longform" && <MetricCard label="Avg. % viewed" value={`${avgPct}%`} accent={color} bar={parseFloat(avgPct)} />}
+              <MetricCard label="Total impressions"    value={fmt(totImpr)}         accent={color} />
+            </OverviewGrid>
+
+            {/* Top video card — visible without clicking */}
+            {sorted.length > 0 && (() => {
+              const top = sorted[0];
+              const share = totViews > 0 ? Math.round((Number(top.views) || 0) / totViews * 100) : 0;
+              const dur = Number(top.duration) || 0;
+              const ytId = top.videoId || "";
+              const link = ytId ? `https://youtube.com/${format === "shorts" ? "shorts/" : "watch?v="}${ytId}` : null;
+              return (
+                <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 14, padding: 16, marginBottom: 16 }}>
+                  <div style={{ display: "inline-flex", alignItems: "center", fontSize: 11, fontWeight: 600,
+                    background: "#faeeda", color: "#854f0b", padding: "3px 10px", borderRadius: 99, marginBottom: 10 }}>
+                    🏆 Top performer this period
+                  </div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: "white", marginBottom: 3 }}>{top.title || "Untitled"}</div>
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 12 }}>
+                    {top.publishedAt || "—"}
+                    {dur > 0 && <span style={{ marginLeft: 8 }}>{fmtSec(dur)}</span>}
+                    {share > 0 && <span style={{ marginLeft: 8, color, fontWeight: 500 }}>{share}% of period's views</span>}
+                  </div>
+                  {/* All key metrics as visible pills */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))", gap: 8, marginBottom: 12 }}>
+                    {[
+                      { label: "Views",    val: fmt(Number(top.views) || 0) },
+                      { label: "Likes",    val: fmt(Number(top.likes) || 0) },
+                      { label: "Comments", val: fmt(Number(top.comments) || 0) },
+                      { label: "CTR",      val: top.ctr ? `${Number(top.ctr).toFixed(2)}%` : "—" },
+                      { label: "Subs gained", val: `+${fmt(Number(top.subscribers) || 0)}` },
+                      ...(format === "shorts" ? [{ label: "Stayed to watch", val: top.stayedToWatch ? `${top.stayedToWatch}%` : "—" }] : []),
+                      ...(format === "longform" ? [{ label: "Avg % viewed", val: top.avgPctViewed ? `${Number(top.avgPctViewed).toFixed(1)}%` : "—" }] : []),
+                      { label: "Impressions", val: fmt(Number(top.impressions) || 0) },
+                    ].map(({ label, val }) => (
+                      <div key={label} style={{ background: "rgba(255,255,255,0.06)", borderRadius: 8, padding: "8px 10px" }}>
+                        <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginBottom: 2 }}>{label}</div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: "white" }}>{val}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {link && (
+                    <a href={link} target="_blank" rel="noopener noreferrer"
+                      style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 8,
+                        background: color + "18", color, fontSize: 12, fontWeight: 600, textDecoration: "none",
+                        border: `1px solid ${color}33` }}>
+                      ▶ Open on YouTube
+                    </a>
+                  )}
+                </div>
+              );
+            })()}
+          </>
       )}
 
       {/* ── ALL VIDEOS ── */}
       {tab === "videos" && (
-        <>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
-            <SectionLabel style={{ margin: 0 }}>{sorted.length} videos · sort by</SectionLabel>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-              {(format === "shorts"
-                ? ["views","likes","comments","stayedToWatch","subscribers","ctr"]
-                : ["views","likes","comments","ctr","avgPctViewed","subscribers"]
-              ).map(key => (
-                <button key={key} onClick={() => setSortKey(key)}
-                  style={{ padding: "3px 10px", borderRadius: 99,
-                    border: `1px solid ${sortKey === key ? COLOR + "44" : "rgba(255,255,255,0.1)"}`,
-                    background: sortKey === key ? COLOR + "18" : "transparent",
-                    color: sortKey === key ? COLOR : "rgba(255,255,255,0.4)",
-                    fontSize: 11, cursor: "pointer", textTransform: "capitalize" }}>
-                  {key === "stayedToWatch" ? "Stayed %" : key === "avgPctViewed" ? "Avg viewed" : key === "ctr" ? "CTR" : key}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {!sorted.length
-            ? <div style={{ textAlign: "center", padding: 60, color: "rgba(255,255,255,0.3)", fontSize: 14 }}>No videos for this period.</div>
-            : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                {/* Header */}
-                <div style={{ display: "grid", gridTemplateColumns: "28px 1fr 72px 72px 72px 72px", gap: 8, padding: "6px 12px",
-                  fontSize: 10, color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                  <div>#</div>
-                  <div>Title</div>
-                  <div style={{ textAlign: "right" }}>Views</div>
-                  <div style={{ textAlign: "right" }}>Likes</div>
-                  <div style={{ textAlign: "right" }}>CTR</div>
-                  <div style={{ textAlign: "right" }}>{format === "shorts" ? "Stayed %" : "Avg viewed"}</div>
-                </div>
-                {sorted.map((v, i) => {
-                  const maxVal = Math.max(...sorted.map(x => Number(x[sortKey]) || 0));
-                  const barW = maxVal > 0 ? Math.round((Number(v[sortKey]) || 0) / maxVal * 100) : 0;
-                  const dur = Number(v.duration) || 0;
-                  const isShort = format === "shorts";
-                  const ytId = v.videoId || "";
-                  const link = ytId ? `https://youtube.com/${isShort ? "shorts/" : "watch?v="}${ytId}` : null;
-                  return (
-                    <div key={v.id || i} style={{ display: "grid", gridTemplateColumns: "28px 1fr 72px 72px 72px 72px", gap: 8, alignItems: "center",
-                      padding: "10px 12px", background: "rgba(255,255,255,0.03)", border: "0.5px solid rgba(255,255,255,0.07)", borderRadius: 10 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: COLOR, textAlign: "center" }}>{i + 1}</div>
-                      <div>
-                        {link
-                          ? <a href={link} target="_blank" rel="noopener noreferrer"
-                              style={{ fontSize: 12, fontWeight: 500, color: "white", textDecoration: "none", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {v.title || "Untitled"}
-                            </a>
-                          : <div style={{ fontSize: 12, fontWeight: 500, color: "white", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.title || "Untitled"}</div>
-                        }
-                        <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", marginTop: 1 }}>{v.publishedAt || "Unpublished"}</div>
-                        <div style={{ height: 3, background: "rgba(255,255,255,0.08)", borderRadius: 99, marginTop: 4, overflow: "hidden" }}>
-                          <div style={{ width: `${barW}%`, height: "100%", background: COLOR + "88", borderRadius: 99 }} />
-                        </div>
-                      </div>
-                      <div style={{ fontSize: 12, fontWeight: 500, color: "rgba(255,255,255,0.85)", textAlign: "right" }}>{fmt(Number(v.views) || 0)}</div>
-                      <div style={{ fontSize: 12, fontWeight: 500, color: "rgba(255,255,255,0.85)", textAlign: "right" }}>{fmt(Number(v.likes) || 0)}</div>
-                      <div style={{ fontSize: 12, fontWeight: 500, color: "rgba(255,255,255,0.85)", textAlign: "right" }}>{v.ctr ? `${Number(v.ctr).toFixed(2)}%` : "—"}</div>
-                      <div style={{ fontSize: 12, fontWeight: 500, color: "rgba(255,255,255,0.85)", textAlign: "right" }}>
-                        {format === "shorts" ? `${Number(v.stayedToWatch) || 0}%` : `${Number(v.avgPctViewed) || 0}%`}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-        </>
+        !sorted.length
+          ? <div style={{ textAlign: "center", padding: 60, color: "rgba(255,255,255,0.3)", fontSize: 14 }}>No videos for this period.</div>
+          : <VideoTable videos={sorted} format={format} color={color} sortKey={sortKey} onSort={setSortKey} />
       )}
 
       {/* ── CHART ── */}
       {tab === "chart" && (
-        <ChartSection videos={allVideos} chartMetrics={chartMetrics} />
+        <ChartSection allVideos={allVideos} format={format} color={color} />
+      )}
+
+      {/* ── COMPARE ── */}
+      {tab === "compare" && (
+        <CompareSection allVideos={allVideos} format={format} color={color} />
       )}
     </div>
-  );
-}
-
-// ─── Shorts Section ───────────────────────────────────────────────────────────
-
-function ShortsSection({ videos }: { videos: any[] }) {
-  const totViews    = videos.reduce((a, v) => a + (Number(v.views) || 0), 0);
-  const totLikes    = videos.reduce((a, v) => a + (Number(v.likes) || 0), 0);
-  const totComments = videos.reduce((a, v) => a + (Number(v.comments) || 0), 0);
-  const totSubs     = videos.reduce((a, v) => a + (Number(v.subscribers) || 0), 0);
-  const avgStayed   = videos.length ? (videos.reduce((a, v) => a + (Number(v.stayedToWatch) || 0), 0) / videos.length).toFixed(1) : "0";
-  const avgCTR      = videos.length ? (videos.reduce((a, v) => a + (Number(v.ctr) || 0), 0) / videos.length).toFixed(2) : "0";
-
-  if (!videos.length) return (
-    <div style={{ textAlign: "center", padding: 60, color: "rgba(255,255,255,0.3)", fontSize: 14 }}>
-      No Shorts data for this period. Import a CSV or select a different month.
-    </div>
-  );
-
-  return (
-    <>
-      <SectionLabel>Shorts overview · {videos.length} videos</SectionLabel>
-      <OverviewGrid>
-        <MetricCard label="Total views"          value={fmt(totViews)}      accent={COLOR} />
-        <MetricCard label="Total likes"          value={fmt(totLikes)}      accent={COLOR} />
-        <MetricCard label="Total comments"       value={fmt(totComments)}   accent={COLOR} />
-        <MetricCard label="Subscribers gained"   value={`+${fmt(totSubs)}`} accent={COLOR} />
-        <MetricCard label="Avg. stayed to watch" value={`${avgStayed}%`}    accent={COLOR} bar={parseFloat(avgStayed)} />
-        <MetricCard label="Avg. CTR"             value={`${avgCTR}%`}       accent={COLOR} bar={parseFloat(avgCTR) * 10} />
-      </OverviewGrid>
-      <SectionLabel>Videos — click to expand · click button to open on YouTube</SectionLabel>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {videos.map((v: any, i: number) => {
-          const likes     = Number(v.likes) || 0;
-          const likesPct  = Number(v.likesPct) || 0;
-          const dislikes  = likesPct > 0 ? Math.round(likes / (likesPct / 100) - likes) : 0;
-          const dur       = Number(v.duration) || 0;
-          const avgDurSec = parseAvgDur(v.avgViewDuration);
-          const stayed    = Number(v.stayedToWatch) || 0;
-          const videoId   = v.videoId || "";
-          const ytUrl     = videoId ? `https://youtube.com/shorts/${videoId}` : null;
-          return (
-            <VideoCard
-              key={v.id || i} id={String(v.id || i)}
-              thumb={v.thumb || "🎬"} title={v.title || "Untitled"}
-              publishedAt={v.publishedAt || "Unpublished"}
-              badge={dur > 0 ? fmtSec(dur) : undefined}
-              accentColor={COLOR}
-              quickStats={[
-                { label: "views",  value: fmt(Number(v.views) || 0) },
-                { label: "likes",  value: fmt(likes) },
-                { label: "stayed", value: `${stayed}%` },
-              ]}
-            >
-              <div style={{ paddingTop: 12 }}>
-                {ytUrl && (
-                  <a href={ytUrl} target="_blank" rel="noopener noreferrer"
-                    style={{ display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 14, padding: "6px 12px", borderRadius: 8, background: "rgba(255,68,68,0.15)", color: "#FF4444", fontSize: 12, fontWeight: 600, textDecoration: "none", border: "1px solid rgba(255,68,68,0.3)" }}
-                    onClick={e => e.stopPropagation()}>
-                    ▶ Open on YouTube
-                  </a>
-                )}
-                <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>All metrics</p>
-                <InlineMetrics items={[
-                  { label: "Views",              value: fmt(Number(v.views) || 0) },
-                  { label: "Duration",           value: dur > 0 ? fmtSec(dur) : "—", sub: dur > 0 ? `${dur}s` : undefined },
-                  { label: "Avg. view duration", value: avgDurSec > 0 ? fmtSec(avgDurSec) : "—", sub: avgDurSec > 0 ? `${avgDurSec}s` : undefined },
-                  { label: "Stayed to watch",    value: stayed > 0 ? `${stayed}%` : "—" },
-                  { label: "Comments",           value: fmt(Number(v.comments) || 0) },
-                  { label: "Likes",              value: fmt(likes) },
-                  { label: "Subscribers gained", value: `+${fmt(Number(v.subscribers) || 0)}` },
-                  { label: "CTR",                value: v.ctr ? `${Number(v.ctr).toFixed(2)}%` : "—" },
-                  { label: "Watch time",         value: v.watchTimeHours ? `${Number(v.watchTimeHours).toFixed(1)}h` : "—" },
-                ]} />
-                <div style={{ marginTop: 16 }}>
-                  <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Likes vs. dislikes</p>
-                  <LikeDislikeBar likes={likes} dislikes={dislikes} />
-                  <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 11, marginTop: 4 }}>
-                    {fmt(likes)} likes · {likesPct > 0 ? `${likesPct}% positive` : "no dislike data"}
-                  </p>
-                </div>
-                {stayed > 0 && (
-                  <div style={{ marginTop: 16 }}>
-                    <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 10, marginBottom: 6 }}>Stayed to watch</p>
-                    <div style={{ height: 8, borderRadius: 99, background: "rgba(255,255,255,0.1)", overflow: "hidden" }}>
-                      <div style={{ width: `${Math.min(stayed, 100)}%`, height: "100%", background: COLOR, borderRadius: 99 }} />
-                    </div>
-                    <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, marginTop: 4 }}>{stayed}% of viewers watched this Short</p>
-                  </div>
-                )}
-              </div>
-            </VideoCard>
-          );
-        })}
-      </div>
-    </>
-  );
-}
-
-// ─── Long-form Section ────────────────────────────────────────────────────────
-
-function LongformSection({ videos }: { videos: any[] }) {
-  const totViews    = videos.reduce((a, v) => a + (Number(v.views) || 0), 0);
-  const totLikes    = videos.reduce((a, v) => a + (Number(v.likes) || 0), 0);
-  const totSubs     = videos.reduce((a, v) => a + (Number(v.subscribers) || 0), 0);
-  const totComments = videos.reduce((a, v) => a + (Number(v.comments) || 0), 0);
-  const avgCTR      = videos.length ? (videos.reduce((a, v) => a + (Number(v.ctr) || 0), 0) / videos.length).toFixed(2) : "0";
-  const avgPct      = videos.length ? (videos.reduce((a, v) => a + (Number(v.avgPctViewed) || 0), 0) / videos.length).toFixed(1) : "0";
-  const totImpr     = videos.reduce((a, v) => a + (Number(v.impressions) || 0), 0);
-
-  if (!videos.length) return (
-    <div style={{ textAlign: "center", padding: 60, color: "rgba(255,255,255,0.3)", fontSize: 14 }}>
-      No Long-form data. Import a <code>youtube-longform.csv</code> file.
-    </div>
-  );
-
-  return (
-    <>
-      <SectionLabel>Long-form overview · {videos.length} videos</SectionLabel>
-      <OverviewGrid>
-        <MetricCard label="Total views"        value={fmt(totViews)}      accent={COLOR} />
-        <MetricCard label="Total likes"        value={fmt(totLikes)}      accent={COLOR} />
-        <MetricCard label="Total comments"     value={fmt(totComments)}   accent={COLOR} />
-        <MetricCard label="Subscribers gained" value={`+${fmt(totSubs)}`} accent={COLOR} />
-        <MetricCard label="Avg. CTR"           value={`${avgCTR}%`}       accent={COLOR} bar={parseFloat(avgCTR) * 10} />
-        <MetricCard label="Avg. % viewed"      value={`${avgPct}%`}       accent={COLOR} bar={parseFloat(avgPct)} />
-        <MetricCard label="Total impressions"  value={fmt(totImpr)}       accent={COLOR} />
-      </OverviewGrid>
-      <SectionLabel>Videos — click to expand</SectionLabel>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {videos.map((v: any, i: number) => {
-          const likes     = Number(v.likes) || 0;
-          const likesPct  = Number(v.likesPct) || 0;
-          const dislikes  = likesPct > 0 ? Math.round(likes / (likesPct / 100) - likes) : 0;
-          const dur       = Number(v.duration) || 0;
-          const avgDurSec = parseAvgDur(v.avgViewDuration);
-          const videoId   = v.videoId || "";
-          const ytUrl     = videoId ? `https://youtube.com/watch?v=${videoId}` : null;
-          return (
-            <VideoCard
-              key={v.id || i} id={String(v.id || i)}
-              thumb={v.thumb || "🎬"} title={v.title || "Untitled"}
-              publishedAt={v.publishedAt || "Unpublished"}
-              badge={dur > 0 ? fmtSec(dur) : undefined}
-              accentColor={COLOR}
-              quickStats={[
-                { label: "views",      value: fmt(Number(v.views) || 0) },
-                { label: "avg viewed", value: `${Number(v.avgPctViewed) || 0}%` },
-                { label: "CTR",        value: v.ctr ? `${Number(v.ctr).toFixed(2)}%` : "—" },
-              ]}
-            >
-              <div style={{ paddingTop: 12 }}>
-                {ytUrl && (
-                  <a href={ytUrl} target="_blank" rel="noopener noreferrer"
-                    style={{ display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 14, padding: "6px 12px", borderRadius: 8, background: "rgba(255,68,68,0.15)", color: "#FF4444", fontSize: 12, fontWeight: 600, textDecoration: "none", border: "1px solid rgba(255,68,68,0.3)" }}
-                    onClick={e => e.stopPropagation()}>
-                    ▶ Open on YouTube
-                  </a>
-                )}
-                <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>All metrics</p>
-                <InlineMetrics items={[
-                  { label: "Views",              value: fmt(Number(v.views) || 0) },
-                  { label: "Duration",           value: dur > 0 ? fmtSec(dur) : "—" },
-                  { label: "Avg. view duration", value: avgDurSec > 0 ? fmtSec(avgDurSec) : "—" },
-                  { label: "Avg. % viewed",      value: `${Number(v.avgPctViewed) || 0}%` },
-                  { label: "CTR",                value: v.ctr ? `${Number(v.ctr).toFixed(2)}%` : "—" },
-                  { label: "Comments",           value: fmt(Number(v.comments) || 0) },
-                  { label: "Likes",              value: fmt(likes) },
-                  { label: "Subscribers gained", value: `+${fmt(Number(v.subscribers) || 0)}` },
-                  { label: "Watch time",         value: v.watchTimeHours ? `${Number(v.watchTimeHours).toFixed(1)}h` : "—" },
-                  { label: "Impressions",        value: fmt(Number(v.impressions) || 0) },
-                ]} />
-                <div style={{ marginTop: 16 }}>
-                  <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Likes vs. dislikes</p>
-                  <LikeDislikeBar likes={likes} dislikes={dislikes} />
-                  <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 11, marginTop: 4 }}>
-                    {fmt(likes)} likes · {likesPct > 0 ? `${likesPct}% positive` : "no dislike data"}
-                  </p>
-                </div>
-                {Number(v.avgPctViewed) > 0 && (
-                  <div style={{ marginTop: 16 }}>
-                    <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 10, marginBottom: 6 }}>Avg. % viewed</p>
-                    <div style={{ height: 8, borderRadius: 99, background: "rgba(255,255,255,0.1)", overflow: "hidden" }}>
-                      <div style={{ width: `${Math.min(Number(v.avgPctViewed), 100)}%`, height: "100%", background: COLOR, borderRadius: 99 }} />
-                    </div>
-                    <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, marginTop: 4 }}>{Number(v.avgPctViewed).toFixed(1)}% of the video watched on average</p>
-                  </div>
-                )}
-              </div>
-            </VideoCard>
-          );
-        })}
-      </div>
-    </>
   );
 }
