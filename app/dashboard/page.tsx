@@ -8,6 +8,14 @@ import InstagramView from "@/components/views/InstagramView";
 import FacebookView from "@/components/views/FacebookView";
 import CSVUploadModal from "@/components/CSVUploadModal";
 
+// Which data keys belong to each platform (for targeted clearing)
+const PLATFORM_KEYS: Record<string, string[]> = {
+  youtube:   ["youtube-shorts", "youtube-longform", "glendora-shorts", "glendora-longform"],
+  tiktok:    ["tiktok"],
+  instagram: ["instagram"],
+  facebook:  ["facebook"],
+};
+
 export default function DashboardPage() {
   const [platform, setPlatform]     = useState("youtube");
   const [dateRange, setDateRange]   = useState<string>("all");
@@ -50,11 +58,16 @@ export default function DashboardPage() {
     }
   }, []);
 
-  const handleClearData = useCallback(async () => {
-    const platforms = ["youtube-shorts", "youtube-longform", "tiktok", "instagram", "facebook"];
-    await Promise.all(platforms.map(p => fetch(`/api/csv?platform=${p}`, { method: "DELETE" })));
-    setCsvData({});
-  }, []);
+  // Clear only the current platform's data
+  const handleClearCurrentPlatform = useCallback(async () => {
+    const keys = PLATFORM_KEYS[platform] || [];
+    await Promise.all(keys.map(k => fetch(`/api/csv?platform=${k}`, { method: "DELETE" })));
+    setCsvData(prev => {
+      const next = { ...prev };
+      keys.forEach(k => delete next[k]);
+      return next;
+    });
+  }, [platform]);
 
   const titles: Record<string, string> = {
     youtube:   "YouTube Analytics",
@@ -64,6 +77,17 @@ export default function DashboardPage() {
   };
 
   const importedTypes = Object.keys(csvData);
+
+  // Check if current platform has any imported data
+  const currentPlatformHasData = (PLATFORM_KEYS[platform] || []).some(k => csvData[k]?.length);
+
+  // Label for clear button
+  const clearLabels: Record<string, string> = {
+    youtube:   "Clear YouTube data",
+    tiktok:    "Clear TikTok data",
+    instagram: "Clear Instagram data",
+    facebook:  "Clear Facebook data",
+  };
 
   if (loading) {
     return (
@@ -90,18 +114,19 @@ export default function DashboardPage() {
               Content performance dashboard
               {importedTypes.length > 0 && (
                 <span style={{ marginLeft: 10, fontSize: 11, color: "#22c55e" }}>
-                  ● Live data ({importedTypes.length} platform{importedTypes.length > 1 ? "s" : ""} imported)
+                  ● Live data ({importedTypes.length} source{importedTypes.length > 1 ? "s" : ""} imported)
                 </span>
               )}
             </p>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            {importedTypes.length > 0 && (
+            {/* Only shows clear button if current platform has data */}
+            {currentPlatformHasData && (
               <button
-                onClick={handleClearData}
-                style={{ fontSize: 12, padding: "6px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(255,255,255,0.4)", cursor: "pointer" }}
+                onClick={handleClearCurrentPlatform}
+                style={{ fontSize: 12, padding: "6px 12px", borderRadius: 8, border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.08)", color: "rgba(239,68,68,0.7)", cursor: "pointer" }}
               >
-                Clear all data
+                {clearLabels[platform]}
               </button>
             )}
             <DateRangePicker value={dateRange} onChange={setDateRange} platform={platform} />
@@ -111,12 +136,12 @@ export default function DashboardPage() {
         <div style={{ padding: 32 }}>
           {platform === "youtube" && (
             <YouTubeView
-  dateRange={dateRange}
-  shortsCsvData={csvData["youtube-shorts"]}
-  longCsvData={csvData["youtube-longform"]}
-  glendoraShortsData={csvData["glendora-shorts"]}
-  glendoraLongData={csvData["glendora-longform"]}
-/>
+              dateRange={dateRange}
+              shortsCsvData={csvData["youtube-shorts"]}
+              longCsvData={csvData["youtube-longform"]}
+              glendoraShortsData={csvData["glendora-shorts"]}
+              glendoraLongData={csvData["glendora-longform"]}
+            />
           )}
           {platform === "tiktok"    && <TikTokView    dateRange={dateRange} csvData={csvData["tiktok"]} />}
           {platform === "instagram" && <InstagramView dateRange={dateRange} csvData={csvData["instagram"]} />}
