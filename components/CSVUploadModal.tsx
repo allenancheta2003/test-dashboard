@@ -33,51 +33,59 @@ const FIELD_MAPS: Record<string, Record<string, string>> = {
     "Impressions click-through rate (%)": "ctr",
     "Subscribers":                        "subscribers",
   },
+  // Glendora uses same column structure as Team Ibrahim
   "glendora-shorts": {
-  "Content":                            "videoId",
-  "Video title":                        "title",
-  "Video publish time":                 "publishedAt",
-  "Duration":                           "duration",
-  "Average view duration":              "avgViewDuration",
-  "Stayed to watch (%)":                "stayedToWatch",
-  "Likes":                              "likes",
-  "Likes (vs. dislikes) (%)":           "likesPct",
-  "Comments added":                     "comments",
-  "Views":                              "views",
-  "Watch time (hours)":                 "watchTimeHours",
-  "Impressions click-through rate (%)": "ctr",
-  "Subscribers":                        "subscribers",
-},
-"glendora-longform": {
-  "Content":                            "videoId",
-  "Video title":                        "title",
-  "Video publish time":                 "publishedAt",
-  "Duration":                           "duration",
-  "Average view duration":              "avgViewDuration",
-  "Average percentage viewed (%)":      "avgPctViewed",
-  "Likes":                              "likes",
-  "Likes (vs. dislikes) (%)":           "likesPct",
-  "Comments added":                     "comments",
-  "Views":                              "views",
-  "Watch time (hours)":                 "watchTimeHours",
-  "Impressions":                        "impressions",
-  "Impressions click-through rate (%)": "ctr",
-  "Subscribers":                        "subscribers",
-},
-  "tiktok": {
-    "Video Title":              "title",
-    "Date":                     "publishedAt",
-    "Views":                    "views",
-    "Likes":                    "likes",
-    "Comments":                 "comments",
-    "Shares":                   "shares",
-    "Saves":                    "saves",
-    "Average watch time (sec)": "avgWatchTime",
-    "Total play time (sec)":    "duration",
-    "Retention Rate (%)":       "retention",
-    "Total Engagements":        "totalEngagement",
+    "Content":                            "videoId",
+    "Video title":                        "title",
+    "Video publish time":                 "publishedAt",
+    "Duration":                           "duration",
+    "Average view duration":              "avgViewDuration",
+    "Stayed to watch (%)":                "stayedToWatch",
+    "Likes":                              "likes",
+    "Likes (vs. dislikes) (%)":           "likesPct",
+    "Comments added":                     "comments",
+    "Views":                              "views",
+    "Watch time (hours)":                 "watchTimeHours",
+    "Impressions click-through rate (%)": "ctr",
+    "Subscribers":                        "subscribers",
   },
-  // Exact columns from Meta Instagram Content export
+  "glendora-longform": {
+    "Content":                            "videoId",
+    "Video title":                        "title",
+    "Video publish time":                 "publishedAt",
+    "Duration":                           "duration",
+    "Average view duration":              "avgViewDuration",
+    "Average percentage viewed (%)":      "avgPctViewed",
+    "Likes":                              "likes",
+    "Likes (vs. dislikes) (%)":           "likesPct",
+    "Comments added":                     "comments",
+    "Views":                              "views",
+    "Watch time (hours)":                 "watchTimeHours",
+    "Impressions":                        "impressions",
+    "Impressions click-through rate (%)": "ctr",
+    "Subscribers":                        "subscribers",
+  },
+  "tiktok": {
+    "Link":                        "link",
+    "Date ":                       "publishedAt",
+    "Date":                        "publishedAt",
+    "CONTENT DESCRIPTION":         "title",
+    "PILLAR":                      "pillar",
+    "VIEWS":                       "views",
+    "DURATION (in seconds)":       "duration",
+    "AV. WATCH TIME (in seconds)": "avgWatchTime",
+    "RETENTION ":                  "retention",
+    "RETENTION":                   "retention",
+    "SHARES ":                     "shares",
+    "SHARES":                      "shares",
+    "SAVES ":                      "saves",
+    "SAVES":                       "saves",
+    "COMMENTS ":                   "comments",
+    "COMMENTS":                    "comments",
+    "LIKES ":                      "likes",
+    "LIKES":                       "likes",
+    "TOTAL ENGAGEMENT":            "totalEngagement",
+  },
   "instagram": {
     "Post ID":        "postId",
     "Description":    "title",
@@ -93,7 +101,6 @@ const FIELD_MAPS: Record<string, Record<string, string>> = {
     "Comments":       "comments",
     "Saves":          "saves",
   },
-  // Exact columns from Meta Facebook Content export
   "facebook": {
     "Post ID":                        "postId",
     "Title":                          "title",
@@ -116,10 +123,10 @@ const FIELD_MAPS: Record<string, Record<string, string>> = {
 };
 
 const TYPE_LABELS: Record<string, string> = {
-  "youtube-shorts":   "YouTube Shorts",
-  "youtube-longform": "YouTube Long-form",
-  "glendora-shorts":   "Glendora YT Shorts",
-"glendora-longform": "Glendora YT Long-form",
+  "youtube-shorts":   "Team Ibrahim YT — Shorts",
+  "youtube-longform": "Team Ibrahim YT — Long-form",
+  "glendora-shorts":  "Glendora YT — Shorts",
+  "glendora-longform":"Glendora YT — Long-form",
   "tiktok":           "TikTok",
   "instagram":        "Instagram",
   "facebook":         "Facebook",
@@ -127,21 +134,24 @@ const TYPE_LABELS: Record<string, string> = {
 
 function detectType(filename: string): string | null {
   const f = filename.toLowerCase().replace(/\s+/g, "-");
-  if (f.includes("youtube-shorts") || f.includes("yt-shorts"))     return "youtube-shorts";
-  if (f.includes("youtube-longform") || f.includes("yt-longform")) return "youtube-longform";
-  if (f.includes("tiktok"))                                         return "tiktok";
-  if (f.includes("instagram"))                                      return "instagram";
-  if (f.includes("facebook"))                                       return "facebook";
+  // Check Glendora BEFORE generic youtube checks
+  if (f.includes("glendora-shorts")  || f.includes("glendora_shorts"))   return "glendora-shorts";
+  if (f.includes("glendora-longform")|| f.includes("glendora_longform"))  return "glendora-longform";
+  if (f.includes("glendora-long")    || f.includes("glendora_long"))      return "glendora-longform";
+  if (f.includes("glendora"))                                              return "glendora-shorts";
+  if (f.includes("youtube-shorts")   || f.includes("yt-shorts"))          return "youtube-shorts";
+  if (f.includes("youtube-longform") || f.includes("yt-longform"))        return "youtube-longform";
+  if (f.includes("youtube-long")     || f.includes("yt-long"))            return "youtube-longform";
+  if (f.includes("tiktok"))                                                return "tiktok";
+  if (f.includes("instagram"))                                             return "instagram";
+  if (f.includes("facebook"))                                              return "facebook";
   return null;
 }
 
-// Robust CSV parser — handles quoted fields with commas AND real newlines inside them
-// (Meta exports have multi-line descriptions inside quoted fields)
 function parseCSV(text: string): Record<string, string>[] {
   const t = text.startsWith("\uFEFF") ? text.slice(1) : text;
   const rows: string[][] = [];
   let cur = "", inQ = false, row: string[] = [];
-
   for (let i = 0; i < t.length; i++) {
     const ch = t[i], nx = t[i + 1];
     if (ch === '"') {
@@ -154,9 +164,7 @@ function parseCSV(text: string): Record<string, string>[] {
       row.push(cur.trim()); cur = "";
       if (row.some(c => c !== "")) rows.push(row);
       row = [];
-    } else {
-      cur += ch;
-    }
+    } else { cur += ch; }
   }
   if (cur || row.length) { row.push(cur.trim()); if (row.some(c => c !== "")) rows.push(row); }
   if (rows.length < 2) return [];
@@ -168,7 +176,6 @@ function parseCSV(text: string): Record<string, string>[] {
   });
 }
 
-// Converts "0:01:23" → seconds
 function parseDuration(val: string): number {
   if (!val) return 0;
   const parts = val.split(":").map(Number);
@@ -177,16 +184,12 @@ function parseDuration(val: string): number {
   return Number(val) || 0;
 }
 
-// Normalizes any date format → "YYYY-MM" for month filtering
 function normalizeDate(raw: string): string {
   if (!raw || raw.trim() === "") return "";
   const s = raw.trim();
-  // MM/DD/YYYY HH:MM — Meta export format
   const mmddyyyy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if (mmddyyyy) return `${mmddyyyy[3]}-${mmddyyyy[1].padStart(2, "0")}`;
-  // YYYY-MM-DD
   if (/^\d{4}-\d{2}/.test(s)) return s.slice(0, 7);
-  // Mon DD, YYYY — YouTube format
   const months: Record<string, string> = {
     jan:"01",feb:"02",mar:"03",apr:"04",may:"05",jun:"06",
     jul:"07",aug:"08",sep:"09",oct:"10",nov:"11",dec:"12"
@@ -209,7 +212,6 @@ function mapRow(row: Record<string, string>, fieldMap: Record<string, string>, i
     } else if (key === "avgViewDuration" && raw.includes(":")) {
       out[key] = parseDuration(raw);
     } else if (key === "title") {
-      // Take first non-empty line — Meta descriptions are multi-line
       out[key] = raw.split(/\r?\n/).find(l => l.trim() !== "")?.trim().slice(0, 120) || `Post ${idx + 1}`;
     } else {
       const num = parseFloat(raw.replace(/,/g, ""));
@@ -220,31 +222,15 @@ function mapRow(row: Record<string, string>, fieldMap: Record<string, string>, i
   return out;
 }
 
-// ─── THE FIX: platform-aware row filter ──────────────────────────────────────
-// Each platform has different column names for the "ID" and "title" fields.
-// We check the right column per platform instead of guessing.
 function shouldSkipRow(row: Record<string, string>, type: string): boolean {
-  if (type === "youtube-shorts" || type === "youtube-longform") {
-    // Skip the YouTube "Total" summary row (Content=Total, Video title=empty)
+  if (type.includes("youtube") || type.includes("glendora")) {
     const content = (row["Content"] || "").trim();
     const title   = (row["Video title"] || "").trim();
     return content === "Total" && title === "";
   }
-  if (type === "instagram") {
-    // Keep all rows that have a Post ID
-    // Never skip based on Date="Lifetime" — that's normal for Meta exports
-    const postId = (row["Post ID"] || "").trim();
-    return postId === "";
-  }
-  if (type === "facebook") {
-    // Keep all rows that have a Post ID
-    const postId = (row["Post ID"] || "").trim();
-    return postId === "";
-  }
-  if (type === "tiktok") {
-    const title = (row["Video Title"] || "").trim();
-    return title === "";
-  }
+  if (type === "instagram") return (row["Post ID"] || "").trim() === "";
+  if (type === "facebook")  return (row["Post ID"] || "").trim() === "";
+  if (type === "tiktok")    return (row["Video Title"] || "").trim() === "";
   return false;
 }
 
@@ -268,7 +254,9 @@ export default function CSVUploadModal({ platform, importedTypes, onImport, onCl
     if (!file.name.endsWith(".csv")) { setError("Please upload a .csv file"); return; }
     const type = detectType(file.name);
     if (!type) {
-      setError(`Can't detect type from "${file.name}". Rename to include: youtube-shorts, youtube-longform, tiktok, instagram, or facebook.`);
+      setError(
+        `Can't detect type from "${file.name}". Rename your file to include one of the names shown in the list below.`
+      );
       return;
     }
     setDetectedType(type);
@@ -306,7 +294,7 @@ export default function CSVUploadModal({ platform, importedTypes, onImport, onCl
           <div>
             <h2 style={{ margin: 0, color: "white", fontSize: 16, fontWeight: 600 }}>Import CSV Data</h2>
             <p style={{ margin: "4px 0 0", color: "rgba(255,255,255,0.35)", fontSize: 12 }}>
-              You can import multiple files — modal stays open after each import
+              Modal stays open after each import so you can upload multiple files
             </p>
           </div>
           <button onClick={onClose} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", fontSize: 20, padding: "4px 8px" }}>✕</button>
@@ -316,7 +304,7 @@ export default function CSVUploadModal({ platform, importedTypes, onImport, onCl
 
           {importedTypes.length > 0 && (
             <div style={{ marginBottom: 20 }}>
-              <p style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 8 }}>Already imported this session:</p>
+              <p style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 8 }}>Already imported:</p>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                 {importedTypes.map(t => (
                   <span key={t} style={{ fontSize: 12, padding: "3px 10px", borderRadius: 99, background: "rgba(34,197,94,0.15)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.3)" }}>
@@ -329,7 +317,7 @@ export default function CSVUploadModal({ platform, importedTypes, onImport, onCl
 
           <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 12, padding: 16, marginBottom: 20 }}>
             <p style={{ margin: "0 0 10px", fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-              Rename your file before uploading
+              Rename your file to one of these before uploading
             </p>
             {Object.entries(TYPE_LABELS).map(([key, label]) => {
               const done = importedTypes.includes(key);
@@ -362,7 +350,7 @@ export default function CSVUploadModal({ platform, importedTypes, onImport, onCl
               >
                 <div style={{ fontSize: 32, marginBottom: 12 }}>📂</div>
                 <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 14, margin: "0 0 4px", fontWeight: 500 }}>Drop CSV here or click to browse</p>
-                <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 12, margin: 0 }}>File must be renamed to include platform name</p>
+                <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 12, margin: 0 }}>Rename file to match one of the names above first</p>
                 <input ref={fileRef} type="file" accept=".csv" style={{ display: "none" }} onChange={e => { if (e.target.files?.[0]) processFile(e.target.files[0]); e.target.value = ""; }} />
               </div>
               {error && (
@@ -400,22 +388,16 @@ export default function CSVUploadModal({ platform, importedTypes, onImport, onCl
                   </tbody>
                 </table>
               </div>
-
               <div style={{ display: "flex", gap: 10 }}>
-                <button
-                  onClick={handleConfirm}
-                  style={{ flex: 1, padding: "11px 0", borderRadius: 10, border: "none", cursor: "pointer", background: "#FF4444", color: "white", fontSize: 14, fontWeight: 600 }}
-                >
+                <button onClick={handleConfirm}
+                  style={{ flex: 1, padding: "11px 0", borderRadius: 10, border: "none", cursor: "pointer", background: "#FF4444", color: "white", fontSize: 14, fontWeight: 600 }}>
                   ✓ Import {fullData?.length} rows into {TYPE_LABELS[detectedType]}
                 </button>
-                <button
-                  onClick={() => { setPreview(null); setDetectedType(null); setFullData(null); setError(null); }}
-                  style={{ padding: "11px 16px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)", cursor: "pointer", background: "transparent", color: "rgba(255,255,255,0.4)", fontSize: 14 }}
-                >
+                <button onClick={() => { setPreview(null); setDetectedType(null); setFullData(null); setError(null); }}
+                  style={{ padding: "11px 16px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)", cursor: "pointer", background: "transparent", color: "rgba(255,255,255,0.4)", fontSize: 14 }}>
                   Cancel
                 </button>
               </div>
-
               <p style={{ marginTop: 12, fontSize: 12, color: "rgba(255,255,255,0.3)", textAlign: "center" }}>
                 After importing, the modal stays open so you can import more files
               </p>
