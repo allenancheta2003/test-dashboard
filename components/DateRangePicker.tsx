@@ -1,25 +1,30 @@
 "use client";
 
-const MONTHS = [
+const MONTH_NAMES = [
   "January","February","March","April","May","June",
   "July","August","September","October","November","December"
 ];
 
-export default function DateRangePicker({ value, onChange, platform }: {
+function monthLabel(ym: string): string {
+  const [year, mo] = ym.split("-");
+  return `${MONTH_NAMES[parseInt(mo) - 1]} ${year}`;
+}
+
+export default function DateRangePicker({ value, onChange, platform, availableMonths }: {
   value: string;
   onChange: (v: string) => void;
   platform?: string;
+  availableMonths?: string[]; // YYYY-MM strings from actual data
 }) {
-  const currentMonth = new Date().getMonth();
-  const currentYear  = new Date().getFullYear();
-
-  // Build last 24 months as options (most recent first)
-  const monthOptions = Array.from({ length: 24 }, (_, i) => {
-    const d = new Date(currentYear, currentMonth - i, 1);
-    const label = `${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
-    const val   = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    return { label, val };
-  });
+  // If availableMonths provided, use those. Otherwise fall back to last 24 months.
+  const monthOptions = availableMonths?.length
+    ? [...availableMonths].sort((a, b) => b.localeCompare(a)).map(ym => ({ val: ym, label: monthLabel(ym) }))
+    : Array.from({ length: 24 }, (_, i) => {
+        const d = new Date();
+        d.setMonth(d.getMonth() - i);
+        const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        return { val: ym, label: monthLabel(ym) };
+      });
 
   return (
     <div style={{ position: "relative" }}>
@@ -40,16 +45,18 @@ export default function DateRangePicker({ value, onChange, platform }: {
           minWidth: 160,
         }}
       >
-        {/* ── Months (most recent first) ── */}
-        <optgroup label="Month" style={{ background: "#0f0f1a", color: "rgba(255,255,255,0.4)" }}>
-          {monthOptions.map(o => (
-            <option key={o.val} value={o.val} style={{ background: "#0f0f1a", color: "white" }}>
-              {o.label}
-            </option>
-          ))}
-        </optgroup>
+        {/* Months — only those with actual data */}
+        {monthOptions.length > 0 && (
+          <optgroup label="Month" style={{ background: "#0f0f1a", color: "rgba(255,255,255,0.4)" }}>
+            {monthOptions.map(o => (
+              <option key={o.val} value={o.val} style={{ background: "#0f0f1a", color: "white" }}>
+                {o.label}
+              </option>
+            ))}
+          </optgroup>
+        )}
 
-        {/* ── Unpublished — only relevant for YouTube (no publish date in CSV) ── */}
+        {/* Unpublished — only for YouTube */}
         {(!platform || platform === "youtube") && (
           <optgroup label="Other" style={{ background: "#0f0f1a", color: "rgba(255,255,255,0.4)" }}>
             <option value="unpublished" style={{ background: "#0f0f1a", color: "white" }}>
@@ -58,7 +65,7 @@ export default function DateRangePicker({ value, onChange, platform }: {
           </optgroup>
         )}
 
-        {/* ── All time ── */}
+        {/* All time */}
         <optgroup label=" " style={{ background: "#0f0f1a" }}>
           <option value="all" style={{ background: "#0f0f1a", color: "white" }}>
             All time
@@ -66,7 +73,6 @@ export default function DateRangePicker({ value, onChange, platform }: {
         </optgroup>
       </select>
 
-      {/* Custom dropdown arrow */}
       <span style={{
         position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
         color: "rgba(255,255,255,0.4)", pointerEvents: "none", fontSize: 10,
